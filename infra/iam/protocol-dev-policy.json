@@ -1,0 +1,70 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "BedrockModels",
+      "Effect": "Allow",
+      "Action": [
+        "bedrock:ListFoundationModels",
+        "bedrock:GetFoundationModel",
+        "bedrock:ListInferenceProfiles",
+        "bedrock:GetInferenceProfile",
+        "bedrock:InvokeModel",
+        "bedrock:InvokeModelWithResponseStream",
+        "bedrock:CallWithBearerToken",
+        "bedrock:CreateGuardrail",
+        "bedrock:GetGuardrail",
+        "bedrock:ApplyGuardrail"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "BedrockKnowledgeBases",
+      "Effect": "Allow",
+      "Action": ["bedrock:*KnowledgeBase*", "bedrock:*DataSource*", "bedrock:Retrieve", "bedrock:RetrieveAndGenerate", "bedrock:StartIngestionJob", "bedrock:GetIngestionJob", "bedrock:ListIngestionJobs"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "MarketplaceModelAccess",
+      "Effect": "Allow",
+      "Action": ["aws-marketplace:ViewSubscriptions", "aws-marketplace:Subscribe"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AgentCore",
+      "Effect": "Allow",
+      "Action": ["bedrock-agentcore:*"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "ProjectBucket",
+      "Effect": "Allow",
+      "Action": ["s3:CreateBucket", "s3:ListBucket", "s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:PutBucket*", "s3:GetBucket*", "s3:PutEncryptionConfiguration", "s3:PutLifecycleConfiguration"],
+      "Resource": ["arn:aws:s3:::protocol-intelligence-*", "arn:aws:s3:::protocol-intelligence-*/*"]
+    },
+    {
+      "Sid": "ContainerImagesForAgentCoreRuntime",
+      "Effect": "Allow",
+      "Action": ["ecr:*", "codebuild:*"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AgentCoreExecutionRoles",
+      "Effect": "Allow",
+      "Action": ["iam:CreateRole", "iam:GetRole", "iam:PutRolePolicy", "iam:AttachRolePolicy", "iam:CreateServiceLinkedRole", "iam:PassRole"],
+      "Resource": ["arn:aws:iam::*:role/AmazonBedrockAgentCore*", "arn:aws:iam::*:role/protocol-intelligence-*", "arn:aws:iam::*:role/aws-service-role/*"]
+    },
+    {
+      "Sid": "ObservabilityAndCost",
+      "Effect": "Allow",
+      "Action": ["logs:*", "cloudwatch:*", "xray:*", "budgets:ViewBudget", "budgets:ModifyBudget", "ce:GetCostAndUsage"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "SearchStores",
+      "Effect": "Allow",
+      "Action": ["aoss:*", "dynamodb:*"],
+      "Resource": "*"
+    }
+  ]
+}

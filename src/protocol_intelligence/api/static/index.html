@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protocol Intelligence</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #667085; --line: #e3e6ea;
+    --accent: #1f6feb; --accent-soft: #e8f0fe; --user: #1f6feb; --warn: #b54708; --warn-soft: #fef0e6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151a; --panel: #1b1f26; --ink: #e6e9ee; --muted: #98a2b3; --line: #2c323c;
+      --accent: #6aa3ff; --accent-soft: #1f2d45; --user: #2f6fd6; --warn: #f5a75c; --warn-soft: #3a2a1c;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 17px; margin: 0; }
+  header .meta { color: var(--muted); font-size: 13px; margin-left: auto; }
+  button { font: inherit; cursor: pointer; }
+  .ghost { background: none; border: 1px solid var(--line); color: var(--ink); border-radius: 8px;
+           padding: 6px 12px; }
+  .ghost:hover { border-color: var(--accent); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; height: calc(100vh - 57px); }
+  #chat { display: flex; flex-direction: column; min-height: 0; }
+  #log { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+  .msg { max-width: 860px; }
+  .msg.user { align-self: flex-end; background: var(--user); color: #fff; padding: 10px 14px;
+              border-radius: 14px 14px 4px 14px; white-space: pre-wrap; }
+  .msg.bot { background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+             padding: 4px 18px; }
+  .msg.bot table { border-collapse: collapse; margin: 10px 0; font-size: 14px; display: block;
+                   overflow-x: auto; }
+  .msg.bot th, .msg.bot td { border: 1px solid var(--line); padding: 6px 8px; text-align: left;
+                             vertical-align: top; }
+  .msg.bot th { background: var(--bg); }
+  .ref { display: inline-block; font-size: 11px; font-weight: 600; background: var(--accent-soft);
+         color: var(--accent); border-radius: 6px; padding: 0 5px; margin: 0 1px; cursor: pointer;
+         vertical-align: 2px; line-height: 17px; }
+  .ref:hover, .ref.active { background: var(--accent); color: #fff; }
+  .stats { color: var(--muted); font-size: 12px; border-top: 1px solid var(--line);
+           padding: 8px 0 10px; margin-top: 8px; }
+  .warn { color: var(--warn); background: var(--warn-soft); border-radius: 8px; padding: 6px 10px;
+          font-size: 13px; margin: 8px 0; }
+  .error { color: var(--warn); }
+  .thinking { color: var(--muted); font-style: italic; padding: 12px 18px; }
+  #examples { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 20px 10px; }
+  #examples button { background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+                     border-radius: 16px; padding: 5px 12px; font-size: 13px; }
+  #examples button:hover { border-color: var(--accent); color: var(--accent); }
+  form { display: flex; gap: 10px; padding: 12px 20px 16px; border-top: 1px solid var(--line);
+         background: var(--panel); }
+  textarea { flex: 1; resize: none; font: inherit; color: var(--ink); background: var(--bg);
+             border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; height: 48px; }
+  textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .send { background: var(--accent); color: #fff; border: 0; border-radius: 10px; padding: 0 20px; }
+  .send:disabled { opacity: .5; cursor: default; }
+  aside { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto;
+          padding: 16px; }
+  aside h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+             margin: 0 0 12px; }
+  .src { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;
+         font-size: 13px; }
+  .src.active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+  .src .head { display: flex; gap: 8px; align-items: baseline; }
+  .src .nct { font-weight: 600; }
+  .src .where { color: var(--muted); margin: 4px 0; }
+  .src blockquote { margin: 6px 0; padding-left: 10px; border-left: 3px solid var(--line);
+                    color: var(--muted); white-space: pre-wrap; max-height: 130px; overflow: hidden; }
+  .src a { color: var(--accent); }
+  .empty { color: var(--muted); font-size: 14px; }
+  @media (max-width: 860px) {
+    main { grid-template-columns: 1fr; height: auto; }
+    #chat { height: calc(100vh - 57px); }
+    aside { border-left: 0; border-top: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Protocol Intelligence</h1>
+  <button class="ghost" id="reset">New conversation</button>
+  <span class="meta" id="meta">100 studies · ClinicalTrials.gov protocols</span>
+</header>
+<main>
+  <section id="chat">
+    <div id="log">
+      <div class="msg bot"><p>Ask about the eligibility, dosing, endpoints, schedules or design of
+        the 100 indexed trials, or ask for counts and comparisons. Each answer cites the protocol
+        page or registry record it came from. Click a citation chip to see its source.</p></div>
+    </div>
+    <div id="examples"></div>
+    <form id="form">
+      <textarea id="q" placeholder="Ask a question… (Enter to send, Shift+Enter for a new line)"></textarea>
+      <button class="send" id="send">Send</button>
+    </form>
+  </section>
+  <aside>
+    <h2>Sources</h2>
+    <div id="sources"><p class="empty">Citations for the latest answer appear here.</p></div>
+  </aside>
+</main>
+<script>
+const EXAMPLES = [
+  "What are the key exclusion criteria in NCT04175600?",
+  "How many phase 3 studies are there, by therapeutic area?",
+  "Compare the primary endpoints of the semaglutide and tirzepatide studies.",
+  "Which oncology studies allow patients with brain metastases?",
+  "How are dose reductions handled for toxicity in the oncology protocols?",
+  "Should my father with heart failure take empagliflozin?",
+];
+const $ = (id) => document.getElementById(id);
+let sessionId = null, busy = false;
+
+$("examples").append(...EXAMPLES.map((t) => {
+  const b = document.createElement("button");
+  b.type = "button"; b.textContent = t; b.onclick = () => ask(t);
+  return b;
+}));
+fetch("/api/info").then((r) => r.json()).then((i) => {
+  $("meta").textContent = `100 studies · model ${i.model}`;
+}).catch(() => {});
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;",
+    '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function add(cls, html) {
+  const d = document.createElement("div");
+  d.className = `msg ${cls}`; d.innerHTML = html;
+  $("log").append(d); $("log").scrollTop = $("log").scrollHeight;
+  return d;
+}
+
+function renderAnswer(r) {
+  const known = new Set(r.citations.map((c) => c.ref));
+  const md = r.answer.replace(/\[(S\d+)\]/g, (m, ref) => known.has(ref)
+    ? `<span class="ref" data-ref="${ref}">${ref}</span>` : `<span class="ref">${ref}?</span>`);
+  let html = DOMPurify.sanitize(marked.parse(md));
+  if (r.unknown_refs.length)
+    html += `<div class="warn">Cited refs that no tool returned (possible grounding failure):
+             ${esc(r.unknown_refs.join(", "))}</div>`;
+  const tools = r.tools_used.map((t) => `${t.tool} ×${t.calls}`).join(", ");
+  html += `<div class="stats">${r.latency_s}s · ${esc(tools)} · tokens in/out
+           ${r.tokens.input ?? "?"}/${r.tokens.output ?? "?"} · ${r.citations.length} sources</div>`;
+  return html;
+}
+
+function pdfLink(c) {
+  return c.page_start ? `${c.source_url}#page=${c.page_start}` : c.source_url;
+}
+
+function renderSources(cits) {
+  if (!cits.length) { $("sources").innerHTML = '<p class="empty">No citations in this answer.</p>'; return; }
+  $("sources").innerHTML = cits.map((c) => {
+    const where = c.source_type === "registry_query" ? "Database query"
+      : c.source_type === "registry" ? "ClinicalTrials.gov record"
+      : `${c.document_title}, ${c.page_start === c.page_end ? "p. " + c.page_start
+                                 : "pp. " + c.page_start + "–" + c.page_end}`;
+    return `<div class="src" id="src-${c.ref}">
+      <div class="head"><span class="ref" data-ref="${c.ref}">${c.ref}</span>
+        <span class="nct">${esc(c.nct_id || "All studies")}</span></div>
+      <div class="where">${esc(where)}<br>${esc(c.section_path)}</div>
+      <blockquote>${esc(c.quote)}</blockquote>
+      <a href="${esc(pdfLink(c))}" target="_blank" rel="noopener">Open source ↗</a></div>`;
+  }).join("");
+}
+
+document.addEventListener("click", (e) => {
+  const ref = e.target.closest(".ref[data-ref]")?.dataset.ref;
+  if (!ref) return;
+  document.querySelectorAll(".active").forEach((el) => el.classList.remove("active"));
+  const card = $(`src-${ref}`);
+  if (card) { card.classList.add("active"); card.scrollIntoView({ behavior: "smooth", block: "nearest" }); }
+  document.querySelectorAll(`.ref[data-ref="${ref}"]`).forEach((el) => el.classList.add("active"));
+});
+
+async function ask(text) {
+  text = text.trim();
+  if (!text || busy) return;
+  busy = true; $("send").disabled = true; $("q").value = "";
+  add("user", esc(text));
+  const wait = add("bot thinking", "Searching protocols… 0s");
+  const t0 = Date.now();
+  const timer = setInterval(() => {
+    wait.textContent = `Searching protocols… ${Math.round((Date.now() - t0) / 1000)}s`;
+  }, 1000);
+  try {
+    const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" },
+                                           body: JSON.stringify({ message: text, session_id: sessionId }) });
+    const r = await res.json();
+    if (!res.ok) throw new Error(r.detail || res.statusText);
+    sessionId = r.session_id;
+    wait.className = "msg bot"; wait.innerHTML = renderAnswer(r);
+    renderSources(r.citations);
+  } catch (err) {
+    wait.className = "msg bot"; wait.innerHTML = `<p class="error">Error: ${esc(err.message)}</p>`;
+  } finally {
+    clearInterval(timer); busy = false; $("send").disabled = false; $("q").focus();
+    $("log").scrollTop = $("log").scrollHeight;
+  }
+}
+
+$("form").onsubmit = (e) => { e.preventDefault(); ask($("q").value); };
+$("q").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); ask($("q").value); }
+});
+$("reset").onclick = async () => {
+  if (sessionId) await fetch(`/api/chat/${sessionId}`, { method: "DELETE" }).catch(() => {});
+  sessionId = null;
+  $("log").innerHTML = '<div class="msg bot"><p>New conversation started.</p></div>';
+  $("sources").innerHTML = '<p class="empty">Citations for the latest answer appear here.</p>';
+};
+</script>
+</body>
+</html>

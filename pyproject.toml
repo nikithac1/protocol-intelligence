@@ -1,0 +1,31 @@
+[project]
+name = "protocol-intelligence"
+version = "0.1.0"
+description = "Grounded clinical-trial protocol Q&A on Strands Agents, Amazon Bedrock and AgentCore"
+requires-python = ">=3.11,<3.13"
+dependencies = [
+    "strands-agents",
+    "bedrock-agentcore",
+    "boto3[crt]",  # crt is required for `aws login` console credentials
+    "python-dotenv",
+    "httpx",
+    "pymupdf",
+    "lancedb",
+    "pyarrow",
+    "pydantic",
+    "fastapi",
+    "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/protocol_intelligence"]
+
+[tool.ruff]
+line-length = 100

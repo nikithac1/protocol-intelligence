@@ -140,6 +140,24 @@ The local API exposes `GET /api/info` and `POST /api/chat`.
   with AWS Signature v4 auth (service `bedrock-agentcore`) and the
   `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id` header.
 
+## Public HTTPS endpoint (no AWS credentials for callers)
+
+```powershell
+.venv\Scripts\python scripts\deploy_http_proxy.py               # Lambda Function URL + API key (re-run to update)
+.venv\Scripts\python scripts\deploy_http_proxy.py --rotate-key  # issue a new key
+```
+
+A Lambda (`deploy/http_proxy_lambda.py`) checks the `x-api-key` header and calls the runtime with its
+own role (`ProtocolIntelligenceHttpProxyRole`, allowed only `InvokeAgentRuntime`). The URL and key are
+saved to `.env` as `PROXY_URL` / `PROXY_API_KEY`. Anyone with both can query the agent, so share the
+key only with intended users.
+
+```bash
+curl -X POST "$PROXY_URL" -H "x-api-key: $PROXY_API_KEY" -H "Content-Type: application/json" \
+     -d '{"prompt": "How many studies are recruiting?"}'
+# follow-up: add "session_id": "<session_id from the previous response>" to the body
+```
+
 ## Tests
 
 ```powershell

@@ -3,7 +3,21 @@
 .env.*
 !.env.example
 *.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
 credentials
+credentials.*
+.aws/
+secrets.*
+*.secret
+*token*.txt
+
+# Claude Code local settings (may hold personal permissions)
+.claude/settings.local.json
 
 # Python
 .venv/
@@ -13,12 +27,15 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Local data (downloaded studies, protocol PDFs, indexes)
+# Local data (downloaded studies, protocol PDFs, indexes) and build output
 data-local/
+build/
+*.log
+response.json
 
 # Editors / OS
 .vscode/
 .idea/
+.DS_Store
 Thumbs.db
 ~$*.docx
-build/

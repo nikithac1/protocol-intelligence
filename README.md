@@ -4,6 +4,109 @@ A chatbot that answers clinical-trial protocol questions, with citations, over 1
 It is built with Strands Agents, Amazon Bedrock and Bedrock AgentCore.
 See `Protocol_Intelligence_AWS_Architecture_and_Implementation_Plan.docx` for the design.
 
+## Use the chatbot (no AWS account needed)
+
+All you need is the endpoint URL and an API key (ask the project owner for the key).
+
+```
+POST https://i7uud2rh46hdcieedegoairhhy0kuqtt.lambda-url.us-east-1.on.aws/
+x-api-key: <API key>
+Content-Type: application/json
+
+{"prompt": "your question", "session_id": "optional - send it back for follow-up questions"}
+```
+
+**macOS / Linux**
+
+```bash
+URL="https://i7uud2rh46hdcieedegoairhhy0kuqtt.lambda-url.us-east-1.on.aws/"
+KEY="<API key>"
+
+curl -sS --max-time 300 -X POST "$URL" -H "x-api-key: $KEY" -H "Content-Type: application/json" \
+  -d '{"prompt": "How many studies are recruiting?"}'
+
+# answer text only (needs jq)
+curl -sS --max-time 300 -X POST "$URL" -H "x-api-key: $KEY" -H "Content-Type: application/json" \
+  -d '{"prompt": "How many studies are recruiting?"}' | jq -r .answer
+```
+
+**Windows PowerShell**
+
+```powershell
+$url = "https://i7uud2rh46hdcieedegoairhhy0kuqtt.lambda-url.us-east-1.on.aws/"
+$key = "<API key>"
+
+$r = Invoke-RestMethod -Method Post -Uri $url -TimeoutSec 300 -ContentType "application/json" `
+       -Headers @{ "x-api-key" = $key } -Body '{"prompt": "How many studies are recruiting?"}'
+$r.answer
+
+# follow-up in the same conversation
+$body = @{ prompt = "How many of those are oncology?"; session_id = $r.session_id } | ConvertTo-Json
+(Invoke-RestMethod -Method Post -Uri $url -TimeoutSec 300 -ContentType "application/json" `
+   -Headers @{ "x-api-key" = $key } -Body $body).answer
+```
+
+**Python** (`pip install requests`)
+
+```python
+import requests
+URL, KEY = "https://i7uud2rh46hdcieedegoairhhy0kuqtt.lambda-url.us-east-1.on.aws/", "<API key>"
+
+def ask(prompt, session_id=None):
+    r = requests.post(URL, headers={"x-api-key": KEY}, timeout=300,
+                      json={"prompt": prompt, "session_id": session_id})
+    r.raise_for_status()
+    return r.json()
+
+first = ask("How many studies are recruiting?")
+print(first["answer"])
+print(ask("How many of those are oncology?", first["session_id"])["answer"])
+```
+
+**Postman:** method POST, the URL above, Authorization *No Auth*, header `x-api-key`, raw JSON body.
+
+### Response
+
+```json
+{
+  "session_id": "session-3f2a...",
+  "answer": "There are **17 studies** currently recruiting ... [S1]",
+  "citations": [
+    {"ref": "S1", "label": "NCT04175600, Study Protocol, pp. 22-23, section \"...\"",
+     "nct_id": "NCT04175600", "document_title": "Study Protocol", "section_path": "...",
+     "page_start": 22, "page_end": 23,
+     "source_url": "https://cdn.clinicaltrials.gov/large-docs/00/NCT04175600/Prot_000.pdf"}
+  ],
+  "unknown_refs": [],
+  "tools_used": [{"tool": "query_study_cohort", "calls": 1}],
+  "latency_s": 6.7,
+  "tokens": {"input": 4812, "output": 306}
+}
+```
+
+- `answer` is Markdown; `[S1]`, `[S2]` point to entries in `citations`.
+- `unknown_refs` lists any reference in the answer that was not backed by retrieved evidence (normally empty).
+- **Follow-ups:** send the returned `session_id` with the next question. Omit it to start a new conversation.
+  Conversations are kept for 30 days. A custom `session_id` must be at least 33 characters.
+
+### Errors and timing
+
+| Status | Meaning |
+|---|---|
+| 401 | Missing or wrong `x-api-key` |
+| 400 | Body is not JSON, `prompt` is missing, or `session_id` is shorter than 33 characters |
+| 5xx | Agent error; retry, or check the CloudWatch logs (see [Operations](#operations)) |
+
+The first question after the agent has been idle takes 20–60 s (it loads the search index); later
+questions take about 4–50 s depending on how much searching they need. Use a timeout of at least 300 s.
+
+### Example questions
+
+- What are the key exclusion criteria in NCT04175600?
+- How many phase 3 studies are in the corpus, broken down by therapeutic area?
+- Compare the primary endpoints of the diabetes studies that use semaglutide or tirzepatide.
+- Which oncology studies allow patients with brain metastases?
+
 ## How it works
 
 ```
@@ -140,23 +243,38 @@ The local API exposes `GET /api/info` and `POST /api/chat`.
   with AWS Signature v4 auth (service `bedrock-agentcore`) and the
   `X-Amzn-Bedrock-AgentCore-Runtime-Session-Id` header.
 
-## Public HTTPS endpoint (no AWS credentials for callers)
+## Deploy the public HTTPS endpoint
 
 ```powershell
 .venv\Scripts\python scripts\deploy_http_proxy.py               # Lambda Function URL + API key (re-run to update)
-.venv\Scripts\python scripts\deploy_http_proxy.py --rotate-key  # issue a new key
+.venv\Scripts\python scripts\deploy_http_proxy.py --rotate-key  # issue a new key (old one stops working)
 ```
 
 A Lambda (`deploy/http_proxy_lambda.py`) checks the `x-api-key` header and calls the runtime with its
-own role (`ProtocolIntelligenceHttpProxyRole`, allowed only `InvokeAgentRuntime`). The URL and key are
-saved to `.env` as `PROXY_URL` / `PROXY_API_KEY`. Anyone with both can query the agent, so share the
-key only with intended users.
+own role (`ProtocolIntelligenceHttpProxyRole`, allowed only `InvokeAgentRuntime` on this runtime). The
+URL and key are saved to `.env` as `PROXY_URL` / `PROXY_API_KEY`; the key is never committed. This is
+what [Use the chatbot](#use-the-chatbot-no-aws-account-needed) calls.
 
-```bash
-curl -X POST "$PROXY_URL" -H "x-api-key: $PROXY_API_KEY" -H "Content-Type: application/json" \
-     -d '{"prompt": "How many studies are recruiting?"}'
-# follow-up: add "session_id": "<session_id from the previous response>" to the body
-```
+- There is one shared key: anyone who has it can query the agent and incur Bedrock cost. Share it only
+  with intended users and rotate it if it leaks (rotation affects everyone).
+- Requests are not tied to individual users; `user_id` in the body is passed through but not verified.
+
+## Operations
+
+| Resource (us-east-1, account 422928733699) | Name / ID |
+|---|---|
+| Public endpoint (Lambda Function URL) | `https://i7uud2rh46hdcieedegoairhhy0kuqtt.lambda-url.us-east-1.on.aws/` |
+| Lambda proxy | `protocol-intelligence-http-proxy` (role `ProtocolIntelligenceHttpProxyRole`) |
+| AgentCore Runtime | `protocol_intelligence-Bi1uvDEDYb`, endpoint `DEFAULT` |
+| AgentCore Memory | `protocol_intelligence_memory-aKf2988eR8` (30-day conversation history) |
+| Runtime execution role | `ProtocolIntelligenceAgentCoreRuntimeRole` |
+| S3 bucket | `protocol-intelligence-422928733699-us-east-1` (`index/`, `deploy/agentcore/`) |
+
+- Logs: CloudWatch log groups `/aws/lambda/protocol-intelligence-http-proxy` and
+  `/aws/bedrock-agentcore/runtimes/protocol_intelligence-Bi1uvDEDYb-DEFAULT`.
+- Update the agent: `scripts/deploy_agentcore.py`. Update the proxy: `scripts/deploy_http_proxy.py`.
+  Neither changes the public URL or the key (unless `--rotate-key`).
+- Rebuild the knowledge base, then `sync_s3.py up --prefix index`; new runtime sessions load the new index.
 
 ## Tests
 

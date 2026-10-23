@@ -21,54 +21,23 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from protocol_intelligence.config import DATA_DIR  # noqa: E402
-from protocol_intelligence.processing.chunk import (  # noqa: E402
-    build_chunk_record, chunk_sections, page_chunks,
-)
-from protocol_intelligence.processing.pdf_extract import extract  # noqa: E402
+from protocol_intelligence.processing.pipeline import process_pdf as _process  # noqa: E402
 from protocol_intelligence.processing.registry_chunks import registry_chunks  # noqa: E402
-from protocol_intelligence.processing.sectionize import sectionize  # noqa: E402
-
-MIN_HEADINGS_FOR_SECTIONS = 5
 
 
 def process_pdf(doc: dict, title: str) -> tuple[list[dict], dict]:
-    path = DATA_DIR / doc["local_path"]
-    ex = extract(str(path))
-    status = {"nct_id": doc["nct_id"], "filename": doc["filename"], "pages": ex.page_count,
-              "toc_pages": len(ex.toc_pages), "garbled_pages": len(ex.garbled_pages),
-              "boilerplate_lines_removed": ex.removed_boilerplate}
-    if ex.needs_ocr:
-        return [], {**status, "status": "needs_ocr", "headings": 0, "chunks": 0}
-
-    sections, headings = sectionize(ex)
-    if headings >= MIN_HEADINGS_FOR_SECTIONS:
-        raws, method, confidence = chunk_sections(sections), "pymupdf+headings", "high"
-        if headings < 15:
-            confidence = "medium"
-    else:
-        by_page: dict[int, list[str]] = {}
-        for ln in ex.lines:
-            by_page.setdefault(ln.page, []).append(ln.text)
-        raws = page_chunks({p: " ".join(t) for p, t in by_page.items()})
-        method, confidence = "pymupdf+pages", "low"
-
     doc_key = Path(doc["filename"]).stem.lower()
-    chunks = [
-        build_chunk_record(
-            nct_id=doc["nct_id"], doc_key=doc_key, document_title=doc.get("label") or title,
-            document_version=doc.get("document_date") or doc_key, source_url=doc["source_url"],
-            source_sha256=doc["sha256"], raw=r, seq=i, extraction_method=method,
-            extraction_confidence=confidence,
-        )
-        for i, r in enumerate(raws)
-    ]
-    outline = [{"path": s.path, "type": s.section_type,
-                "pages": [s.paragraphs[0].page_start, s.paragraphs[-1].page_end]} for s in sections]
-    out = DATA_DIR / "processed" / "sections" / f"{doc['nct_id']}__{doc_key}.json"
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(outline, indent=1), encoding="utf-8")
-    return chunks, {**status, "status": "ok", "headings": headings, "chunks": len(chunks),
-                    "method": method, "confidence": confidence}
+    chunks, status, outline = _process(
+        DATA_DIR / doc["local_path"], nct_id=doc["nct_id"], doc_key=doc_key,
+        document_title=doc.get("label") or title,
+        document_version=doc.get("document_date") or doc_key,
+        source_url=doc["source_url"], sha256=doc["sha256"])
+    status = {**status, "filename": doc["filename"]}
+    if status["status"] == "ok":
+        out = DATA_DIR / "processed" / "sections" / f"{doc['nct_id']}__{doc_key}.json"
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_text(json.dumps(outline, indent=1), encoding="utf-8")
+    return chunks, status
 
 
 def main() -> int:
@@ -97,8 +66,6 @@ def main() -> int:
             except Exception as e:  # one bad PDF must not stop the corpus
                 chunks, status = [], {"nct_id": nct, "filename": doc["filename"],
                                       "status": "failed", "reason": f"{type(e).__name__}: {e}"[:200]}
-            # Traceability rule: reject chunks missing citation-critical metadata.
-            chunks = [c for c in chunks if c["nct_id"] and c["source_url"] and c["text"].strip()]
             all_chunks.extend(chunks)
             report.append(status)
             print(f"{nct} {doc['filename']:<22} {status['status']:<9} pages={status.get('pages', '-'):<4} "

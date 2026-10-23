@@ -45,14 +45,26 @@ def age_years(text: str | None) -> float | None:
     return round(float(m.group(1)) * _UNIT_YEARS[m.group(2).lower()], 3) if m else None
 
 
-def build(studies_jsonl: Path, db_path: Path = DB_PATH) -> int:
+def read_records(*paths: Path) -> list[dict]:
+    """Canonical study records from one or more JSONL files; later files win on duplicate IDs."""
+    records = {}
+    for path in paths:
+        if path.exists():
+            for line in path.read_text(encoding="utf-8").splitlines():
+                r = json.loads(line)
+                records[r["nct_id"]] = r
+    return list(records.values())
+
+
+def build(*studies_jsonl: Path, db_path: Path = DB_PATH) -> int:
+    """(Re)build the database. Written to a temp file and swapped in, so readers never see it half-built."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    db_path.unlink(missing_ok=True)
-    con = sqlite3.connect(db_path)
+    tmp = db_path.with_suffix(".tmp")
+    tmp.unlink(missing_ok=True)
+    con = sqlite3.connect(tmp)
     con.executescript(SCHEMA)
     n = 0
-    for line in studies_jsonl.read_text(encoding="utf-8").splitlines():
-        r = json.loads(line)
+    for r in read_records(*studies_jsonl):
         nct = r["nct_id"]
         con.execute(
             "INSERT INTO studies VALUES (" + ",".join("?" * 30) + ")",
@@ -82,6 +94,7 @@ def build(studies_jsonl: Path, db_path: Path = DB_PATH) -> int:
         n += 1
     con.commit()
     con.close()
+    tmp.replace(db_path)
     return n
 
 

@@ -32,7 +32,7 @@ def db(tmp_path):
             _study("NCT00000003", ["PHASE1"], "RECRUITING", "oncology", 20, "12 Years", "17 Years")]
     jsonl.write_text("\n".join(json.dumps(r) for r in rows), encoding="utf-8")
     path = tmp_path / "studies.db"
-    repo.build(jsonl, path)
+    repo.build(jsonl, db_path=path)
     return path
 
 

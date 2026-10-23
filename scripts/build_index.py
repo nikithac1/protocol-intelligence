@@ -8,7 +8,6 @@ Then: python scripts/sync_s3.py up --prefix index
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 import time
 from pathlib import Path
@@ -25,16 +24,17 @@ def main() -> int:
     ap.add_argument("--studies-only", action="store_true")
     args = ap.parse_args()
 
-    studies = DATA_DIR / "processed" / "studies.jsonl"
-    n = study_repository.build(studies)
+    processed = DATA_DIR / "processed"
+    # Admin-portal uploads live in their own files so re-running ingestion never drops them.
+    studies = [processed / "studies.jsonl", processed / "uploaded_studies.jsonl"]
+    n = study_repository.build(*studies)
     print(f"SQLite study store: {n} studies -> {study_repository.DB_PATH}")
     if args.studies_only:
         return 0
 
-    areas = {json.loads(l)["nct_id"]: json.loads(l).get("therapeutic_area", "")
-             for l in studies.read_text(encoding="utf-8").splitlines()}
+    areas = {r["nct_id"]: r.get("therapeutic_area", "") for r in study_repository.read_records(*studies)}
     t0 = time.time()
-    rows = index.build(DATA_DIR / "processed" / "chunks.jsonl", areas,
+    rows = index.build([processed / "chunks.jsonl", processed / "uploaded_chunks.jsonl"], areas,
                        progress=lambda i, total: print(f"  embedded {i}/{total}", flush=True))
     print(f"LanceDB index: {rows} chunks -> {index.LOCAL_URI} ({time.time() - t0:.0f}s)")
     return 0

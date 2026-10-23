@@ -39,7 +39,8 @@ def _sha256(path: Path) -> str:
 
 def _local_files(prefix: str = "") -> Iterator[tuple[Path, str]]:
     root = DATA_DIR / prefix if prefix else DATA_DIR
-    for path in sorted(p for p in root.rglob("*") if p.is_file()):
+    files = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
+    for path in files:
         if path.suffix in SKIP_SUFFIXES:
             continue
         yield path, path.relative_to(DATA_DIR).as_posix()

@@ -1,0 +1,360 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protocol Intelligence Admin</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #ffffff; --ink: #1c2330; --muted: #667085; --line: #e3e6ea;
+    --accent: #1f6feb; --accent-soft: #e8f0fe; --warn: #b54708; --warn-soft: #fef0e6;
+    --ok: #067647; --ok-soft: #e7f6ec;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #12151a; --panel: #1b1f26; --ink: #e6e9ee; --muted: #98a2b3; --line: #2c323c;
+      --accent: #6aa3ff; --accent-soft: #1f2d45; --warn: #f5a75c; --warn-soft: #3a2a1c;
+      --ok: #4ccf8a; --ok-soft: #173325;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 12px; padding: 12px 20px;
+           border-bottom: 1px solid var(--line); background: var(--panel); }
+  header h1 { font-size: 17px; margin: 0; }
+  header .tag { font-size: 12px; color: var(--accent); background: var(--accent-soft);
+                border-radius: 6px; padding: 1px 7px; }
+  header nav { margin-left: auto; display: flex; gap: 8px; }
+  a { color: var(--accent); }
+  button, input, select { font: inherit; color: var(--ink); }
+  button { cursor: pointer; }
+  .ghost { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px;
+           text-decoration: none; color: var(--ink); }
+  .ghost:hover { border-color: var(--accent); }
+  .primary { background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 8px 16px; }
+  .primary:disabled { opacity: .5; cursor: default; }
+  .danger { background: none; border: 1px solid var(--line); color: var(--warn); border-radius: 8px;
+            padding: 3px 10px; font-size: 13px; }
+  .danger:hover { border-color: var(--warn); }
+  main { max-width: 1180px; margin: 0 auto; padding: 20px; display: grid; gap: 20px;
+         grid-template-columns: minmax(0, 420px) minmax(0, 1fr); align-items: start; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted);
+       margin: 0 0 14px; }
+  .tiles { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; }
+  .tile .v { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .tile .k { color: var(--muted); font-size: 13px; }
+  .tile.pending { border-color: var(--warn); }
+  .tile.pending .v { color: var(--warn); }
+  label { display: block; font-size: 13px; color: var(--muted); margin: 12px 0 4px; }
+  label .req { color: var(--warn); }
+  input[type=text], input[type=url], input[type=date], input[type=password], select {
+    width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  input:focus, select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  #drop { border: 2px dashed var(--line); border-radius: 12px; padding: 22px; text-align: center;
+          color: var(--muted); cursor: pointer; transition: border-color .15s, background .15s; }
+  #drop.over, #drop:hover { border-color: var(--accent); background: var(--accent-soft); }
+  #drop strong { color: var(--ink); display: block; word-break: break-all; }
+  #file { display: none; }
+  .actions { display: flex; gap: 10px; align-items: center; margin-top: 16px; }
+  .msg { font-size: 13px; }
+  .msg.error { color: var(--warn); }
+  .job { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; font-size: 13px; }
+  .job .head { display: flex; gap: 8px; align-items: baseline; }
+  .job .head b { word-break: break-all; }
+  .job ol { margin: 6px 0 0; padding-left: 20px; color: var(--muted); }
+  .job ol li:last-child { color: var(--ink); }
+  .badge { font-size: 11px; font-weight: 600; border-radius: 6px; padding: 1px 7px; white-space: nowrap; }
+  .badge.running, .badge.queued { color: var(--accent); background: var(--accent-soft); }
+  .badge.done, .badge.live { color: var(--ok); background: var(--ok-soft); }
+  .badge.failed, .badge.local { color: var(--warn); background: var(--warn-soft); }
+  .badge.corpus { color: var(--muted); background: var(--bg); border: 1px solid var(--line); }
+  .publish { display: flex; gap: 12px; align-items: center; justify-content: space-between;
+             flex-wrap: wrap; margin-bottom: 14px; padding: 10px 12px; border-radius: 10px;
+             background: var(--bg); font-size: 13px; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 10px; }
+  .toolbar input { flex: 1; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  td .t { display: block; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .empty { color: var(--muted); font-size: 14px; padding: 12px 0; }
+  dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel);
+           color: var(--ink); padding: 20px; width: min(380px, 92vw); }
+  dialog::backdrop { background: rgb(0 0 0 / .35); }
+  @media (max-width: 900px) {
+    main { grid-template-columns: 1fr; padding: 16px; }
+    .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>Protocol Intelligence</h1><span class="tag">Admin</span>
+  <nav><a class="ghost" href="/">Chat</a><button class="ghost" id="lock">Change key</button></nav>
+</header>
+<main>
+  <div class="tiles">
+    <div class="tile"><div class="v" id="t-studies">–</div><div class="k">Studies</div></div>
+    <div class="tile"><div class="v" id="t-docs">–</div><div class="k">Protocol documents</div></div>
+    <div class="tile"><div class="v" id="t-chunks">–</div><div class="k">Indexed chunks</div></div>
+    <div class="tile" id="t-pend-tile"><div class="v" id="t-pend">–</div><div class="k">Uploaded documents</div></div>
+  </div>
+
+  <section class="card">
+    <h2>Onboard a protocol PDF</h2>
+    <form id="form">
+      <div id="drop" tabindex="0" role="button" aria-label="Choose a PDF">
+        <span id="drop-text">Drop a PDF here or click to choose one</span>
+      </div>
+      <input type="file" id="file" accept="application/pdf,.pdf">
+      <div class="row">
+        <div><label for="nct">NCT ID <span class="req">*</span></label>
+          <input type="text" id="nct" placeholder="NCT01234567" required pattern="[Nn][Cc][Tt]\d{8}"></div>
+        <div><label for="area">Therapeutic area</label>
+          <select id="area"><option value="">From registry / other</option></select></div>
+      </div>
+      <label for="title">Document title</label>
+      <input type="text" id="title" placeholder="Study Protocol, Amendment 3">
+      <div class="row">
+        <div><label for="version">Version date</label><input type="date" id="version"></div>
+        <div><label for="url">Public URL</label><input type="url" id="url" placeholder="https://…"></div>
+      </div>
+      <p class="hint">A new NCT ID's ClinicalTrials.gov record is fetched automatically. Add a public URL
+        so citations link to the PDF from the deployed agent too; without one they link to this server.</p>
+      <div class="actions">
+        <button class="primary" id="submit" disabled>Upload and index</button>
+        <span class="msg" id="form-msg"></span>
+      </div>
+    </form>
+    <div id="jobs"></div>
+  </section>
+
+  <section class="card">
+    <h2>Knowledge store</h2>
+    <div class="publish" id="publish-bar">
+      <span id="publish-text">Checking…</span>
+      <button class="primary" id="publish" disabled>Publish to AgentCore</button>
+    </div>
+    <div class="toolbar">
+      <input type="text" id="filter" placeholder="Filter by NCT ID or title">
+      <select id="scope" aria-label="Show">
+        <option value="all">All documents</option><option value="uploaded">Uploaded only</option>
+      </select>
+    </div>
+    <div class="table-wrap"><table>
+      <thead><tr><th>NCT ID</th><th>Document</th><th class="num">Pages</th><th class="num">Chunks</th>
+        <th>Status</th><th></th></tr></thead>
+      <tbody id="docs"><tr><td colspan="6" class="empty">Loading…</td></tr></tbody>
+    </table></div>
+  </section>
+</main>
+
+<dialog id="key-dialog">
+  <form method="dialog" id="key-form">
+    <h2>Admin key</h2>
+    <p class="hint">Enter ADMIN_API_KEY from the server's .env.</p>
+    <input type="password" id="key" autocomplete="current-password">
+    <div class="actions"><button class="primary">Continue</button>
+      <span class="msg error" id="key-msg"></span></div>
+  </form>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let adminKey = "";
+try { adminKey = sessionStorage.getItem("adminKey") || ""; } catch {}
+let documents = [], chosen = null, canPublish = true;
+
+function esc(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;",
+    '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function api(path, opts = {}) {
+  const res = await fetch(path, { ...opts, headers: { ...(opts.headers || {}), "x-admin-key": adminKey } });
+  if (res.status === 401) { askKey(adminKey ? "That key was not accepted." : ""); throw new Error("Admin key required"); }
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.detail || res.statusText);
+  return body;
+}
+
+function askKey(msg = "") {
+  $("key-msg").textContent = msg;
+  if (!$("key-dialog").open) $("key-dialog").showModal();
+  $("key").focus();
+}
+$("key-form").onsubmit = () => {
+  adminKey = $("key").value.trim();
+  try { sessionStorage.setItem("adminKey", adminKey); } catch {}
+  init();
+};
+$("lock").onclick = () => askKey();
+
+// ------------------------------------------------------------ upload form
+function choose(f) {
+  if (!f) return;
+  if (!/\.pdf$/i.test(f.name) && f.type !== "application/pdf") {
+    $("form-msg").className = "msg error"; $("form-msg").textContent = "Choose a PDF file."; return;
+  }
+  chosen = f;
+  $("drop-text").innerHTML = `<strong>${esc(f.name)}</strong>${(f.size / 1048576).toFixed(1)} MB · click to change`;
+  if (!$("title").value) $("title").value = f.name.replace(/\.pdf$/i, "").replace(/[_-]+/g, " ");
+  const m = f.name.match(/NCT\d{8}/i);
+  if (m && !$("nct").value) $("nct").value = m[0].toUpperCase();
+  $("form-msg").textContent = "";
+  $("submit").disabled = false;
+}
+$("drop").onclick = () => $("file").click();
+$("drop").onkeydown = (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("file").click(); } };
+$("file").onchange = (e) => choose(e.target.files[0]);
+["dragenter", "dragover"].forEach((ev) => $("drop").addEventListener(ev, (e) => {
+  e.preventDefault(); $("drop").classList.add("over"); }));
+["dragleave", "drop"].forEach((ev) => $("drop").addEventListener(ev, (e) => {
+  e.preventDefault(); $("drop").classList.remove("over"); }));
+$("drop").addEventListener("drop", (e) => choose(e.dataTransfer.files[0]));
+
+$("form").onsubmit = async (e) => {
+  e.preventDefault();
+  if (!chosen) return;
+  const fd = new FormData();
+  fd.append("file", chosen);
+  fd.append("nct_id", $("nct").value.trim());
+  fd.append("therapeutic_area", $("area").value);
+  fd.append("document_title", $("title").value.trim());
+  fd.append("document_version", $("version").value);
+  fd.append("source_url", $("url").value.trim());
+  $("submit").disabled = true;
+  $("form-msg").className = "msg"; $("form-msg").textContent = "Uploading…";
+  try {
+    const job = await api("/api/admin/documents", { method: "POST", body: fd });
+    $("form-msg").textContent = "Queued. You can upload the next file.";
+    $("form").reset(); chosen = null;
+    $("drop-text").textContent = "Drop a PDF here or click to choose one";
+    watch(job);
+  } catch (err) {
+    $("form-msg").className = "msg error"; $("form-msg").textContent = err.message;
+    $("submit").disabled = false;
+  }
+};
+
+function renderJob(job) {
+  let el = $(`job-${job.job_id}`);
+  if (!el) {
+    el = document.createElement("div");
+    el.className = "job"; el.id = `job-${job.job_id}`;
+    $("jobs").prepend(el);
+  }
+  const d = job.document;
+  const result = job.status === "done"
+    ? `<div class="hint">${d.pages} pages → ${d.chunks} chunks (${esc(d.extraction_confidence)} confidence)` +
+      (d.registry_chunks ? `, plus ${d.registry_chunks} registry chunks for the new study` : "") + `. Searchable now.</div>`
+    : job.status === "failed" ? `<div class="msg error">${esc(job.error)}</div>` : "";
+  el.innerHTML = `<div class="head"><span class="badge ${job.status}">${job.status}</span>
+      <b>${esc(job.filename)}</b><span class="hint">${esc(job.nct_id)}</span></div>
+    ${job.steps.length ? `<ol>${job.steps.map((s) => `<li>${esc(s.message)}</li>`).join("")}</ol>` : ""}${result}`;
+}
+
+async function watch(job) {
+  renderJob(job);
+  while (job.status === "queued" || job.status === "running") {
+    await new Promise((r) => setTimeout(r, 1500));
+    try { job = await api(`/api/admin/jobs/${job.job_id}`); } catch { continue; }
+    renderJob(job);
+  }
+  loadDocuments();
+}
+
+// ------------------------------------------------------------ knowledge store
+function renderDocs() {
+  const q = $("filter").value.trim().toLowerCase();
+  const uploadedOnly = $("scope").value === "uploaded";
+  const rows = documents.filter((d) => (!uploadedOnly || d.uploaded) &&
+    (!q || d.nct_id.toLowerCase().includes(q) || (d.document_title || "").toLowerCase().includes(q)));
+  if (!rows.length) {
+    $("docs").innerHTML = `<tr><td colspan="6" class="empty">${uploadedOnly && !q
+      ? "No uploaded documents yet." : "No documents match."}</td></tr>`;
+    return;
+  }
+  $("docs").innerHTML = rows.map((d) => {
+    const status = !d.uploaded ? '<span class="badge corpus">Corpus</span>'
+      : d.published ? '<span class="badge live">Published</span>' : '<span class="badge local">Local only</span>';
+    return `<tr><td>${esc(d.nct_id)}</td>
+      <td><a class="t" href="${esc(d.source_url)}" target="_blank" rel="noopener" title="${esc(d.document_title)}">${esc(d.document_title)}</a>
+        ${d.uploaded ? `<span class="hint">${esc(d.uploaded_at.slice(0, 16).replace("T", " "))} UTC${d.new_study ? " · new study" : ""}</span>` : ""}</td>
+      <td class="num">${d.pages || ""}</td><td class="num">${d.chunks}</td><td>${status}</td>
+      <td>${d.uploaded ? `<button class="danger" data-del="${esc(d.sha256)}" data-name="${esc(d.document_title)}">Remove</button>` : ""}</td></tr>`;
+  }).join("");
+}
+$("filter").oninput = renderDocs;
+$("scope").onchange = renderDocs;
+
+async function loadDocuments() {
+  try {
+    const r = await api("/api/admin/documents");
+    documents = r.documents;
+    const uploaded = documents.filter((d) => d.uploaded).length;
+    $("t-studies").textContent = r.studies.toLocaleString();
+    $("t-docs").textContent = documents.length.toLocaleString();
+    $("t-chunks").textContent = r.chunks.toLocaleString();
+    $("t-pend").textContent = uploaded.toLocaleString();
+    $("t-pend-tile").classList.toggle("pending", r.unpublished_changes);
+    $("publish-text").textContent = !canPublish ? "S3_BUCKET is not set, so publishing is off."
+      : r.unpublished_changes ? "The local index has changes the deployed agent does not have yet."
+      : "The deployed agent is up to date with this index.";
+    $("publish").disabled = !r.unpublished_changes;
+    renderDocs();
+  } catch (err) {
+    $("docs").innerHTML = `<tr><td colspan="6" class="empty">${esc(err.message)}</td></tr>`;
+  }
+}
+
+$("docs").addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-del]");
+  if (!btn) return;
+  if (btn.dataset.confirm !== "1") {  // two-step confirm without a blocking dialog
+    btn.dataset.confirm = "1"; btn.textContent = "Confirm remove";
+    setTimeout(() => { if (btn.isConnected) { btn.dataset.confirm = ""; btn.textContent = "Remove"; } }, 4000);
+    return;
+  }
+  btn.disabled = true; btn.textContent = "Removing…";
+  try { await api(`/api/admin/documents/${btn.dataset.del}`, { method: "DELETE" }); }
+  catch (err) { btn.textContent = err.message; }
+  loadDocuments();
+});
+
+$("publish").onclick = async () => {
+  $("publish").disabled = true;
+  $("publish-text").textContent = "Uploading the index to S3…";
+  try {
+    const s = await api("/api/admin/publish", { method: "POST" });
+    $("publish-text").textContent = `Published: ${s.uploaded} files uploaded (${(s.bytes / 1048576).toFixed(1)} MB). ` +
+      "New conversations on the deployed agent use the updated index.";
+    setTimeout(loadDocuments, 4000);
+  } catch (err) {
+    $("publish-text").textContent = `Publish failed: ${err.message}`;
+    $("publish").disabled = false;
+  }
+};
+
+async function init() {
+  try {
+    const info = await api("/api/admin/info");
+    $("area").innerHTML = '<option value="">From registry / other</option>' + info.therapeutic_areas
+      .filter((a) => a !== "other").map((a) => `<option value="${a}">${a.replaceAll("_", " ")}</option>`).join("");
+    canPublish = Boolean(info.s3_bucket);
+    $("publish").hidden = !canPublish;
+    loadDocuments();
+  } catch {}
+}
+init();
+</script>
+</body>
+</html>

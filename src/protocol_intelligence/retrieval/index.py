@@ -32,10 +32,9 @@ def embedding_text(c: dict) -> str:
     return f"{c['nct_id']} | {' > '.join(c['section_path'])}\n{c['text']}"
 
 
-def build(chunks_path: Path, areas: dict[str, str], uri: Path = LOCAL_URI, progress=None) -> int:
-    chunks = [json.loads(l) for l in chunks_path.read_text(encoding="utf-8").splitlines()]
+def _rows(chunks: list[dict], areas: dict[str, str], progress=None) -> list[dict]:
     vectors = embed_many([embedding_text(c) for c in chunks], progress=progress)
-    rows = [{
+    return [{
         "chunk_id": c["chunk_id"], "nct_id": c["nct_id"], "source_type": c["source_type"],
         "document_title": c["document_title"], "document_version": c["document_version"],
         "section_path": " > ".join(c["section_path"]), "section_type": c["section_type"],
@@ -44,12 +43,61 @@ def build(chunks_path: Path, areas: dict[str, str], uri: Path = LOCAL_URI, progr
         "extraction_confidence": c["extraction_confidence"],
         "therapeutic_area": areas.get(c["nct_id"], ""), "vector": v,
     } for c, v in zip(chunks, vectors)]
+
+
+def read_chunks(*paths: Path) -> list[dict]:
+    return [json.loads(l) for p in paths if p.exists()
+            for l in p.read_text(encoding="utf-8").splitlines()]
+
+
+def build(chunks_paths: list[Path], areas: dict[str, str], uri: Path = LOCAL_URI,
+          progress=None) -> int:
+    rows = _rows(read_chunks(*chunks_paths), areas, progress)
     db = lancedb.connect(str(uri))
     table = db.create_table(TABLE, data=pa.Table.from_pylist(rows, schema=SCHEMA), mode="overwrite")
     table.create_index("text", config=FTS(with_position=True), replace=True)  # BM25 keyword index
     for col in ("nct_id", "section_type", "source_type", "therapeutic_area"):
         table.create_scalar_index(col, replace=True)  # fast metadata filters
+    open_table.cache_clear()
     return len(rows)
+
+
+def _local_table():
+    if not LOCAL_URI.exists():
+        raise RuntimeError(f"No local index at {LOCAL_URI}; run scripts/build_index.py "
+                           "or scripts/sync_s3.py down --prefix index first")
+    return open_table()  # the agent's cached handle, so searches see the change immediately
+
+
+def add_chunks(chunks: list[dict], areas: dict[str, str]) -> int:
+    """Embed and append chunks, replacing any rows with the same chunk_id."""
+    table = _local_table()
+    rows = _rows(chunks, areas)
+    ids = [c["chunk_id"] for c in chunks]
+    for i in range(0, len(ids), 500):
+        table.delete("chunk_id IN ({})".format(", ".join(_quote(x) for x in ids[i:i + 500])))
+    table.add(pa.Table.from_pylist(rows, schema=SCHEMA))
+    table.optimize()  # fold the new rows into the FTS and scalar indexes
+    return len(rows)
+
+
+def find(column: str, value: str) -> dict | None:
+    rows = (open_table().search().where(f"{column} = {_quote(value)}")
+            .select(["nct_id", "document_title"]).limit(1).to_list())
+    return rows[0] if rows else None
+
+
+def delete_where(**equals: str) -> int:
+    """Delete rows matching every column = value pair; returns the number removed."""
+    table = _local_table()
+    before = table.count_rows()
+    table.delete(" AND ".join(f"{col} = {_quote(v)}" for col, v in equals.items()))
+    table.optimize()
+    return before - table.count_rows()
+
+
+def _quote(value: str) -> str:
+    return "'" + value.replace("'", "''") + "'"
 
 
 @lru_cache

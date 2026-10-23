@@ -145,12 +145,12 @@ ClinicalTrials.gov API ──► ingest ──► process (PDF → sections → 
 src/protocol_intelligence/
   config.py            settings from .env, AWS session and clients
   storage.py           S3 helpers
-  ingestion/           ClinicalTrials.gov client, study selection, normalisation, PDF download
+  ingestion/           ClinicalTrials.gov client, study selection, PDF download, admin onboarding
   processing/          PDF extraction, sectionizing, chunking, registry chunks
   knowledge/           SQLite study repository
   retrieval/           embeddings, LanceDB index, hybrid search
   agent/               Strands agent, tools, prompts, evidence ledger
-  api/                 FastAPI app + static test UI
+  api/                 FastAPI app, chat UI and admin portal
 scripts/               command-line entry points (below)
 deploy/                AgentCore entrypoint and runtime requirements
 infra/iam/             IAM policy for the developer identity
@@ -220,6 +220,39 @@ The selection policy is in `src/protocol_intelligence/ingestion/study_selector.p
 ```
 
 The local API exposes `GET /api/info` and `POST /api/chat`.
+
+## Onboard new protocol PDFs (admin portal)
+
+`scripts/serve.py` also serves an admin portal at http://127.0.0.1:8000/admin (linked from the chat
+header). Drop in a PDF, give its NCT ID, and it is indexed in about 15–60 s:
+
+1. Checks the file: it must be a PDF of at most 50 MB with a text layer, and not already be in the
+   store (matched by SHA-256).
+2. If the NCT ID is not in the corpus, fetches its ClinicalTrials.gov record into the study store and
+   indexes its registry chunks too.
+3. Extracts, sectionizes and chunks the PDF with the same pipeline as the batch corpus, embeds the
+   chunks with Titan, and appends them to LanceDB. The local chatbot can search them right away.
+4. **Publish to AgentCore** uploads `index/` to S3. New runtime sessions then load the updated store.
+
+Set `ADMIN_API_KEY` in `.env` to require a key. The page asks for it once per browser tab.
+Uploads are stored apart from the batch corpus, so `build_index.py` keeps them on a rebuild:
+`raw/uploads/`, `processed/uploaded_documents.json`, `processed/uploaded_chunks.jsonl` and
+`processed/uploaded_studies.jsonl`. Give a public URL for each upload so that citations from the
+deployed agent can link to the PDF. Without one they link to `/documents/<sha256>.pdf` on the
+local server.
+
+| Endpoint (header `x-admin-key`) | Purpose |
+|---|---|
+| `POST /api/admin/documents` | multipart: `file`, `nct_id`, optional `document_title`, `document_version`, `source_url`, `therapeutic_area`; returns `202` with a job |
+| `GET /api/admin/jobs/{job_id}` | job status and steps: `queued`, `running`, `done` or `failed` |
+| `GET /api/admin/documents` | every protocol document in the index, uploads first, plus totals |
+| `DELETE /api/admin/documents/{sha256}` | remove an uploaded document (and the study it added, if any) |
+| `POST /api/admin/publish` | upload `index/` to S3 for AgentCore; back up the upload files |
+
+```powershell
+curl.exe -H "x-admin-key: $env:ADMIN_API_KEY" -F nct_id=NCT01234567 -F "document_title=Protocol v2" `
+  -F "file=@C:\path\protocol.pdf" http://127.0.0.1:8000/api/admin/documents
+```
 
 ## Deploy to AgentCore Runtime
 

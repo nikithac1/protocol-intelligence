@@ -2,20 +2,28 @@
 
   python scripts/serve.py            # then open http://127.0.0.1:8000
   POST /api/chat {"session_id": "...", "message": "..."}  -> answer, citations, tools, timing
+
+Admin portal at /admin (onboard new protocol PDFs into the knowledge store). Its /api/admin/*
+routes need the x-admin-key header when ADMIN_API_KEY is set in .env.
 """
 
 from __future__ import annotations
 
+import hmac
+import os
 import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from protocol_intelligence.agent.agent import ProtocolAgent
 from protocol_intelligence.config import get_settings
+from protocol_intelligence.ingestion import onboard
 
 STATIC = Path(__file__).parent / "static"
 MAX_SESSIONS = 50
@@ -69,3 +77,98 @@ def reset(session_id: str) -> dict:
     with _sessions_lock:
         _sessions.pop(session_id, None)
     return {"reset": True}
+
+
+@app.get("/documents/{sha256}.pdf")
+def document(sha256: str) -> FileResponse:
+    """Citation link target for uploaded PDFs that have no public URL."""
+    path = onboard.pdf_path(sha256)
+    if not path or not path.exists():
+        raise HTTPException(404, "Document not found")
+    return FileResponse(path, media_type="application/pdf")
+
+
+# ---------------------------------------------------------------- admin portal
+
+_jobs: dict[str, dict] = {}
+_worker = ThreadPoolExecutor(max_workers=1)  # uploads are indexed one at a time, in order
+
+
+def require_admin(x_admin_key: str | None = Header(default=None)) -> None:
+    expected = os.getenv("ADMIN_API_KEY", "").strip()
+    if expected and not hmac.compare_digest(x_admin_key or "", expected):
+        raise HTTPException(401, "Missing or wrong admin key")
+
+
+def _run_job(job: dict, data: bytes, fields: dict) -> None:
+    def step(msg: str) -> None:
+        job["steps"].append({"at": datetime.now(UTC).isoformat(timespec="seconds"),
+                             "message": msg})
+    job["status"] = "running"
+    try:
+        job["document"] = onboard.onboard_pdf(data, step=step, **fields)
+        job["status"] = "done"
+    except onboard.OnboardError as e:
+        job.update(status="failed", error=str(e))
+    except Exception as e:  # Bedrock/AWS/PDF errors: show them instead of losing the job
+        job.update(status="failed", error=f"{type(e).__name__}: {e}")
+
+
+@app.get("/admin")
+def admin_page() -> FileResponse:
+    return FileResponse(STATIC / "admin.html")
+
+
+@app.get("/api/admin/info", dependencies=[Depends(require_admin)])
+def admin_info() -> dict:
+    return {"therapeutic_areas": onboard.THERAPEUTIC_AREAS, "max_mb": onboard.MAX_BYTES // 2**20,
+            "s3_bucket": get_settings().s3_bucket}
+
+
+@app.get("/api/admin/documents", dependencies=[Depends(require_admin)])
+def admin_documents() -> dict:
+    return onboard.list_documents()
+
+
+@app.post("/api/admin/documents", status_code=202, dependencies=[Depends(require_admin)])
+def admin_upload(file: UploadFile = File(...), nct_id: str = Form(...),
+                 document_title: str = Form(""), document_version: str = Form(""),
+                 source_url: str = Form(""), therapeutic_area: str = Form("")) -> dict:
+    data = file.file.read(onboard.MAX_BYTES + 1)
+    try:  # reject bad input now rather than as a failed job
+        nct_id = onboard.validate(data, nct_id, therapeutic_area or None)
+    except onboard.OnboardError as e:
+        raise HTTPException(400, str(e)) from e
+    if source_url and not source_url.startswith(("https://", "http://")):
+        raise HTTPException(400, "Source URL must start with https://")
+    job = {"job_id": uuid.uuid4().hex, "status": "queued", "filename": file.filename,
+           "nct_id": nct_id, "steps": [], "document": None, "error": None}
+    _jobs[job["job_id"]] = job
+    _worker.submit(_run_job, job, data, {
+        "filename": file.filename or "upload.pdf", "nct_id": nct_id,
+        "document_title": document_title, "document_version": document_version,
+        "source_url": source_url, "therapeutic_area": therapeutic_area or None})
+    return job
+
+
+@app.get("/api/admin/jobs/{job_id}", dependencies=[Depends(require_admin)])
+def admin_job(job_id: str) -> dict:
+    if job_id not in _jobs:
+        raise HTTPException(404, "Unknown job")
+    return _jobs[job_id]
+
+
+@app.delete("/api/admin/documents/{sha256}", dependencies=[Depends(require_admin)])
+def admin_delete(sha256: str) -> dict:
+    try:
+        return onboard.delete_document(sha256)
+    except onboard.OnboardError as e:
+        raise HTTPException(400, str(e)) from e
+
+
+@app.post("/api/admin/publish", dependencies=[Depends(require_admin)])
+def admin_publish() -> dict:
+    try:
+        return onboard.publish()
+    except Exception as e:
+        raise HTTPException(502, f"{type(e).__name__}: {e}") from e

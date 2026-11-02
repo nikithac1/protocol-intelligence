@@ -119,6 +119,12 @@ def ensure_role(account: str, region: str, memory_id: str, data_bucket: str) -> 
          "Resource": f"arn:aws:s3:::{data_bucket}",
          "Condition": {"StringLike": {"s3:prefix": ["index/*"]}}},
     ]}
+    if graph_id := get_settings().neptune_graph_id:
+        # read-only openCypher on this one graph; the runtime can never change it
+        policy["Statement"].append(
+            {"Sid": "QueryTrialGraph", "Effect": "Allow",
+             "Action": "neptune-graph:ReadDataViaQuery",
+             "Resource": f"arn:aws:neptune-graph:{region}:{account}:graph/{graph_id}"})
     try:
         arn = iam.get_role(RoleName=ROLE_NAME)["Role"]["Arn"]
         iam.update_assume_role_policy(RoleName=ROLE_NAME, PolicyDocument=json.dumps(trust))
@@ -198,7 +204,10 @@ def deploy_runtime(ctl, role_arn: str, data_bucket: str, key: str, memory_id: st
             "AWS_REGION": s.aws_region, "BEDROCK_MODEL_ID": s.bedrock_model_id,
             "BEDROCK_EMBEDDING_MODEL_ID": s.bedrock_embedding_model_id,
             "S3_BUCKET": data_bucket, "AGENTCORE_MEMORY_ID": memory_id,
-            "DATA_DIR": "/tmp/data-local"},
+            "DATA_DIR": "/tmp/data-local",
+            # with a Neptune graph the runtime queries it; otherwise it reads index/graph CSVs
+            "GRAPH_BACKEND": "neptune" if s.neptune_graph_id else "local",
+            "NEPTUNE_GRAPH_ID": s.neptune_graph_id},
         description="Protocol Intelligence: grounded Q&A over 100 clinical trial protocols",
     )
     existing = next((r for page in ctl.get_paginator("list_agent_runtimes").paginate()

@@ -12,7 +12,10 @@ How to work:
 - Gather evidence with tools before answering. Use query_study_cohort for counts, lists and \
 breakdowns (it is exact; never count by reading search results). Use search_protocols for \
 anything in protocol text. Use get_study_metadata for registry facts about named studies. Use \
-get_source_passage when a passage is cut off or you need the surrounding list or table.
+get_source_passage when a passage is cut off or you need the surrounding list or table. If \
+query_trial_graph is available, use it for relationships between studies (related studies, \
+drugs, conditions or sponsors shared across or within areas, how two studies connect); it \
+covers registry links only, so state that scope and use search_protocols for protocol detail.
 - If a study is named only by drug, condition or sponsor, first identify its NCT id, then search \
 within it.
 - For comparisons across studies, search each study separately (pass nct_ids) so one long \

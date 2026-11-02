@@ -8,7 +8,7 @@ import re
 from strands import tool
 
 from protocol_intelligence.agent.evidence import EvidenceLedger, citation_label
-from protocol_intelligence.knowledge import study_repository
+from protocol_intelligence.knowledge import graph, study_repository
 from protocol_intelligence.retrieval import hybrid
 from protocol_intelligence.retrieval.index import open_table
 
@@ -160,4 +160,58 @@ def make_tools(ledger: EvidenceLedger) -> list:
             "extraction_confidence": "high"})
         return json.dumps(result, default=str)
 
-    return [search_protocols, get_source_passage, get_study_metadata, query_study_cohort]
+    @tool
+    def query_trial_graph(question_type: str, nct_id: str | None = None,
+                          other_nct_id: str | None = None, kind: str | None = None,
+                          name: str | None = None, therapeutic_area: str | None = None,
+                          min_areas: int = 2, limit: int = 10) -> str:
+        """Relationships between studies from the knowledge graph: studies linked through a shared
+        intervention (MeSH drug or treatment), condition or lead sponsor. Use for "which studies
+        are related to X", "what links the diabetes studies", "which drugs appear in more than one
+        area", "how is study A connected to study B". Use search_protocols for protocol text.
+
+        The result has a `ref` to cite as [Sn] after any fact taken from it.
+
+        Args:
+            question_type: One of:
+                related_studies (nct_id): other studies sharing an intervention, condition or
+                    sponsor, most shared links first.
+                shared_across_areas (kind, min_areas): interventions, conditions or sponsors whose
+                    studies span several therapeutic areas.
+                shared_within_area (therapeutic_area, kind): what two or more studies of one area
+                    have in common.
+                studies_linked_to (kind, name): studies with an intervention, condition or sponsor
+                    whose name contains `name`.
+                connection (nct_id, other_nct_id): shortest chain of shared links between two
+                    studies, up to 6 hops.
+            nct_id: e.g. "NCT05488366".
+            other_nct_id: The second study, for connection.
+            kind: "intervention", "condition" or "sponsor".
+            name: Text to match for studies_linked_to, e.g. "metformin" or "Yale".
+            therapeutic_area: oncology, diabetes_metabolic, cardiovascular, infectious_disease or
+                mental_health.
+            min_areas: For shared_across_areas: minimum number of areas, 2-5.
+            limit: Max rows, 1-50.
+        """
+        try:
+            result = graph.run(question_type, nct_id=nct_id, other_nct_id=other_nct_id, kind=kind,
+                               name=name, therapeutic_area=therapeutic_area,
+                               min_areas=max(2, min(int(min_areas), 5)),
+                               limit=max(1, min(int(limit), 50)))
+        except (ValueError, graph.GraphUnavailable) as e:
+            return json.dumps({"error": str(e)})
+        spec = json.dumps({"question_type": result["question_type"], **result["args"]},
+                          sort_keys=True)
+        result["ref"] = ledger.register({
+            "chunk_id": f"graph|{spec}", "nct_id": "", "source_type": "graph",
+            "document_title": "Knowledge graph (ClinicalTrials.gov registry links)",
+            "section_path": f"Knowledge graph query over the indexed studies: {spec}",
+            "section_type": "", "page_start": None, "page_end": None,
+            "source_url": "https://clinicaltrials.gov", "text": f"{len(result['results'])} results",
+            "extraction_confidence": "high"})
+        return json.dumps(result, default=str)
+
+    tools = [search_protocols, get_source_passage, get_study_metadata, query_study_cohort]
+    if graph.enabled():  # GRAPH_BACKEND=off, or no graph built yet: the agent runs without it
+        tools.append(query_trial_graph)
+    return tools

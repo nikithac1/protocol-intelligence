@@ -106,6 +106,7 @@ questions take about 4–50 s depending on how much searching they need. Use a t
 - How many phase 3 studies are in the corpus, broken down by therapeutic area?
 - Compare the primary endpoints of the diabetes studies that use semaglutide or tirzepatide.
 - Which oncology studies allow patients with brain metastases?
+- Which drugs are tested in more than one therapeutic area?
 
 ## How it works
 
@@ -138,6 +139,7 @@ ClinicalTrials.gov API ──► ingest ──► process (PDF → sections → 
 | `get_source_passage` | Fetch a cited chunk with its neighbouring chunks for fuller context |
 | `get_study_metadata` | Structured registry metadata for specific NCT IDs |
 | `query_study_cohort` | Counts and filters across the whole corpus ("how many recruiting oncology studies?") |
+| `query_trial_graph` | Relationships from the knowledge graph: related studies, drugs/conditions/sponsors shared across or within areas, how two studies connect |
 
 ## Project layout
 
@@ -147,7 +149,7 @@ src/protocol_intelligence/
   storage.py           S3 helpers
   ingestion/           ClinicalTrials.gov client, study selection, PDF download, admin onboarding
   processing/          PDF extraction, sectionizing, chunking, registry chunks
-  knowledge/           SQLite study repository
+  knowledge/           SQLite study repository, knowledge graph (graph.py)
   retrieval/           embeddings, LanceDB index, hybrid search
   agent/               Strands agent, tools, prompts, evidence ledger
   api/                 FastAPI app, chat UI and admin portal
@@ -208,6 +210,37 @@ Run these in order. Each step is re-runnable and skips work already done.
 Outputs go to `data-local/` (gitignored): `manifest.json`, `coverage_report.md`,
 `processed/studies.jsonl` (canonical records), `raw/studies/`, `raw/protocols/`, `index/`.
 The selection policy is in `src/protocol_intelligence/ingestion/study_selector.py`.
+
+## Knowledge graph
+
+`scripts/build_graph.py` turns the registry records into a graph: `(Study)-[:TESTS]->(Intervention)`,
+`[:STUDIES]->(Condition)`, `[:SPONSORED_BY]->(Sponsor)` and `[:IN_AREA]->(Area)`, from the MeSH
+interventions and conditions and the lead sponsor. Procedures such as biopsy or imaging are not
+treated as interventions. It writes openCypher CSV files to `data-local/index/graph/`.
+
+The `query_trial_graph` tool runs one of five fixed query templates (the model never writes
+queries). `GRAPH_BACKEND` in `.env` picks where they run:
+
+| `GRAPH_BACKEND` | Where queries run |
+|---|---|
+| `local` (default) | In-process over the CSV files; no AWS service needed |
+| `neptune` | Amazon Neptune Analytics (openCypher), graph `NEPTUNE_GRAPH_ID` |
+| `off` | The agent runs without the graph tool |
+
+```powershell
+.venv\Scripts\python.exe scripts\build_graph.py
+.venv\Scripts\python.exe scripts\sync_s3.py up --prefix index/graph
+.venv\Scripts\python.exe scripts\setup_neptune.py up       # create graph + import (billed hourly)
+.venv\Scripts\python.exe scripts\setup_neptune.py load     # re-import after build_graph.py
+.venv\Scripts\python.exe scripts\setup_neptune.py pause    # billed at 10% while paused
+.venv\Scripts\python.exe scripts\setup_neptune.py resume
+.venv\Scripts\python.exe scripts\setup_neptune.py delete   # stops all charges
+```
+
+Neptune Analytics at the smallest size (16 m-NCU) costs about $0.48/h running and $0.048/h
+paused (us-east-1). When `NEPTUNE_GRAPH_ID` is set, `deploy_agentcore.py` points the runtime at
+Neptune and grants it read-only query access to that graph; otherwise the runtime uses the CSVs.
+While the graph is paused, graph questions return an error and the other tools keep working.
 
 ## Ask questions locally
 
@@ -302,6 +335,7 @@ what [Use the chatbot](#use-the-chatbot-no-aws-account-needed) calls.
 | AgentCore Memory | `protocol_intelligence_memory-aKf2988eR8` (30-day conversation history) |
 | Runtime execution role | `ProtocolIntelligenceAgentCoreRuntimeRole` |
 | S3 bucket | `protocol-intelligence-422928733699-us-east-1` (`index/`, `deploy/agentcore/`) |
+| Neptune Analytics graph | `protocol-intelligence-graph` (`g-5hh4b5w9b3`), import role `protocol-intelligence-neptune-import` |
 
 - Logs: CloudWatch log groups `/aws/lambda/protocol-intelligence-http-proxy` and
   `/aws/bedrock-agentcore/runtimes/protocol_intelligence-Bi1uvDEDYb-DEFAULT`.

@@ -22,7 +22,7 @@ logging.basicConfig(level=logging.INFO)
 
 # Cold start: pull the search index and study database from S3 into DATA_DIR (~50 MB).
 _t0 = time.time()
-for prefix in ("index/lancedb/", "index/studies.db"):
+for prefix in ("index/lancedb/", "index/studies.db", "index/graph/"):
     storage.download(prefix)
 log.info("Index ready in %.1fs", time.time() - _t0)
 

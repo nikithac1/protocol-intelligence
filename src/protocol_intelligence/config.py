@@ -44,6 +44,8 @@ class Settings:
     agentcore_memory_id: str
     agentcore_runtime_arn: str
     ctgov_api_base: str
+    graph_backend: str  # local (CSV files under index/graph), neptune, or off
+    neptune_graph_id: str
 
     @property
     def has_bedrock_api_key(self) -> bool:
@@ -63,6 +65,8 @@ def get_settings() -> Settings:
         agentcore_memory_id=_env("AGENTCORE_MEMORY_ID"),
         agentcore_runtime_arn=_env("AGENTCORE_RUNTIME_ARN"),
         ctgov_api_base=_env("CTGOV_API_BASE", "https://clinicaltrials.gov/api/v2"),
+        graph_backend=_env("GRAPH_BACKEND", "local").lower(),
+        neptune_graph_id=_env("NEPTUNE_GRAPH_ID"),
     )
 
 

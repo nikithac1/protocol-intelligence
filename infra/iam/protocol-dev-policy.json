@@ -65,6 +65,12 @@
       "Effect": "Allow",
       "Action": ["aoss:*", "dynamodb:*"],
       "Resource": "*"
+    },
+    {
+      "Sid": "NeptuneAnalytics",
+      "Effect": "Allow",
+      "Action": ["neptune-graph:*"],
+      "Resource": "*"
     }
   ]
 }

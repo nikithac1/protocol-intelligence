@@ -13,7 +13,7 @@ _REF = re.compile(r"\[(S\d+)\]")
 
 
 def citation_label(p: dict) -> str:
-    if p["source_type"] == "registry_query":
+    if p["source_type"] in ("registry_query", "graph"):
         return p["section_path"]
     if p["source_type"] == "registry":
         where = "ClinicalTrials.gov record"

@@ -164,6 +164,7 @@ function renderSources(cits) {
   if (!cits.length) { $("sources").innerHTML = '<p class="empty">No citations in this answer.</p>'; return; }
   $("sources").innerHTML = cits.map((c) => {
     const where = c.source_type === "registry_query" ? "Database query"
+      : c.source_type === "graph" ? "Knowledge graph query"
       : c.source_type === "registry" ? "ClinicalTrials.gov record"
       : `${c.document_title}, ${c.page_start === c.page_end ? "p. " + c.page_start
                                  : "pp. " + c.page_start + "–" + c.page_end}`;

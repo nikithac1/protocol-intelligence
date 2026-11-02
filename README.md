@@ -6,10 +6,10 @@ See `Protocol_Intelligence_AWS_Architecture_and_Implementation_Plan.docx` for th
 
 ## Use the chatbot (no AWS account needed)
 
-All you need is the endpoint URL and an API key (ask the project owner for the key).
+All you need is the endpoint URL and an API key (ask the project owner for both).
 
 ```
-POST https://i7uud2rh46hdcieedegoairhhy0kuqtt.lambda-url.us-east-1.on.aws/
+POST <endpoint-url>
 x-api-key: <API key>
 Content-Type: application/json
 
@@ -19,7 +19,7 @@ Content-Type: application/json
 **macOS / Linux**
 
 ```bash
-URL="https://i7uud2rh46hdcieedegoairhhy0kuqtt.lambda-url.us-east-1.on.aws/"
+URL="<endpoint-url>"
 KEY="<API key>"
 
 curl -sS --max-time 300 -X POST "$URL" -H "x-api-key: $KEY" -H "Content-Type: application/json" \
@@ -33,7 +33,7 @@ curl -sS --max-time 300 -X POST "$URL" -H "x-api-key: $KEY" -H "Content-Type: ap
 **Windows PowerShell**
 
 ```powershell
-$url = "https://i7uud2rh46hdcieedegoairhhy0kuqtt.lambda-url.us-east-1.on.aws/"
+$url = "<endpoint-url>"
 $key = "<API key>"
 
 $r = Invoke-RestMethod -Method Post -Uri $url -TimeoutSec 300 -ContentType "application/json" `
@@ -50,7 +50,7 @@ $body = @{ prompt = "How many of those are oncology?"; session_id = $r.session_i
 
 ```python
 import requests
-URL, KEY = "https://i7uud2rh46hdcieedegoairhhy0kuqtt.lambda-url.us-east-1.on.aws/", "<API key>"
+URL, KEY = "<endpoint-url>", "<API key>"
 
 def ask(prompt, session_id=None):
     r = requests.post(URL, headers={"x-api-key": KEY}, timeout=300,
@@ -327,18 +327,21 @@ what [Use the chatbot](#use-the-chatbot-no-aws-account-needed) calls.
 
 ## Operations
 
-| Resource (us-east-1, account 422928733699) | Name / ID |
+The deploy scripts print these values and save the IDs and the endpoint URL to `.env`
+(`AGENTCORE_RUNTIME_ARN`, `AGENTCORE_MEMORY_ID`, `NEPTUNE_GRAPH_ID`, `PROXY_URL`).
+
+| Resource (us-east-1, account <account-id>) | Name / ID |
 |---|---|
-| Public endpoint (Lambda Function URL) | `https://i7uud2rh46hdcieedegoairhhy0kuqtt.lambda-url.us-east-1.on.aws/` |
+| Public endpoint (Lambda Function URL) | `<endpoint-url>` |
 | Lambda proxy | `protocol-intelligence-http-proxy` (role `ProtocolIntelligenceHttpProxyRole`) |
-| AgentCore Runtime | `protocol_intelligence-Bi1uvDEDYb`, endpoint `DEFAULT` |
-| AgentCore Memory | `protocol_intelligence_memory-aKf2988eR8` (30-day conversation history) |
+| AgentCore Runtime | `protocol_intelligence-<runtime-id>`, endpoint `DEFAULT` |
+| AgentCore Memory | `protocol_intelligence_memory-<memory-id>` (30-day conversation history) |
 | Runtime execution role | `ProtocolIntelligenceAgentCoreRuntimeRole` |
-| S3 bucket | `protocol-intelligence-422928733699-us-east-1` (`index/`, `deploy/agentcore/`) |
-| Neptune Analytics graph | `protocol-intelligence-graph` (`g-5hh4b5w9b3`), import role `protocol-intelligence-neptune-import` |
+| S3 bucket | `protocol-intelligence-<account-id>-us-east-1` (`index/`, `deploy/agentcore/`) |
+| Neptune Analytics graph | `protocol-intelligence-graph` (`<graph-id>`), import role `protocol-intelligence-neptune-import` |
 
 - Logs: CloudWatch log groups `/aws/lambda/protocol-intelligence-http-proxy` and
-  `/aws/bedrock-agentcore/runtimes/protocol_intelligence-Bi1uvDEDYb-DEFAULT`.
+  `/aws/bedrock-agentcore/runtimes/protocol_intelligence-<runtime-id>-DEFAULT`.
 - Update the agent: `scripts/deploy_agentcore.py`. Update the proxy: `scripts/deploy_http_proxy.py`.
   Neither changes the public URL or the key (unless `--rotate-key`).
 - Rebuild the knowledge base, then `sync_s3.py up --prefix index`; new runtime sessions load the new index.

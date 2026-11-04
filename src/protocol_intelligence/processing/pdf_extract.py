@@ -21,6 +21,7 @@ _STOPWORDS = {"the", "and", "of", "to", "in", "for", "with", "be", "is", "will",
               "on", "by", "as", "at", "are", "this", "from", "study", "patients", "an", "not"}
 
 
+# Detect broken text
 def _is_garbled(page_text: str) -> bool:
     """Broken font encodings yield symbol soup; real prose has plenty of stopwords."""
     tokens = re.findall(r"[A-Za-z]+", page_text.lower())
@@ -29,6 +30,7 @@ def _is_garbled(page_text: str) -> bool:
     return sum(t in _STOPWORDS for t in tokens) / len(tokens) < 0.04
 
 
+# One PDF line
 @dataclass
 class Line:
     text: str
@@ -38,6 +40,7 @@ class Line:
     block: int  # global block counter; lines sharing a block form a paragraph
 
 
+# Extracted PDF
 @dataclass
 class ExtractedDoc:
     lines: list[Line]
@@ -48,16 +51,19 @@ class ExtractedDoc:
     garbled_pages: list[int] = field(default_factory=list)
     removed_boilerplate: int = 0
 
+    # Needs OCR?
     @property
     def needs_ocr(self) -> bool:
         too_sparse = self.page_count > 0 and self.text_chars / self.page_count < 200
         return too_sparse or len(self.garbled_pages) > 0.5 * self.page_count
 
 
+# Normalize repeated text
 def _norm_boiler(text: str) -> str:
     return _DIGITS.sub("#", text.strip().lower())
 
 
+# Read PDF lines
 def extract(path: str) -> ExtractedDoc:
     doc = pymupdf.open(path)
     pages: list[list[Line]] = []

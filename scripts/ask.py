@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from protocol_intelligence.agent.agent import ProtocolAgent  # noqa: E402
 
 
+# Print answer
 def show(r: dict) -> None:
     print("\n" + r["answer"] + "\n")
     print("Sources:")
@@ -29,6 +30,7 @@ def show(r: dict) -> None:
           f"{r['tokens']['input']}/{r['tokens']['output']})")
 
 
+# Ask from terminal
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     ap = argparse.ArgumentParser()

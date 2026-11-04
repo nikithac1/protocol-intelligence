@@ -16,6 +16,7 @@ from protocol_intelligence.config import DATA_DIR  # noqa: E402
 from protocol_intelligence.knowledge import graph, study_repository  # noqa: E402
 
 
+# Build graph files
 def main() -> int:
     processed = DATA_DIR / "processed"
     records = study_repository.read_records(processed / "studies.jsonl",

@@ -35,6 +35,7 @@ ROLE_NAME = "ProtocolIntelligenceHttpProxyRole"
 HANDLER_FILE = PROJECT_ROOT / "deploy" / "http_proxy_lambda.py"
 
 
+# Create Lambda role
 def ensure_role(runtime_arn: str) -> str:
     iam = client("iam")
     trust = {"Version": "2012-10-17", "Statement": [{
@@ -61,6 +62,7 @@ def ensure_role(runtime_arn: str) -> str:
     return arn
 
 
+# Zip Lambda code
 def package() -> bytes:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
@@ -68,6 +70,7 @@ def package() -> bytes:
     return buf.getvalue()
 
 
+# Create, update Lambda
 def ensure_function(lam, role_arn: str, env: dict) -> None:
     code = package()
     config = dict(Runtime="python3.12", Handler="http_proxy_lambda.handler", Role=role_arn,
@@ -96,6 +99,7 @@ def ensure_function(lam, role_arn: str, env: dict) -> None:
     lam.get_waiter("function_updated_v2").wait(FunctionName=FUNCTION)
 
 
+# Create public URL
 def ensure_url(lam) -> str:
     cors = {"AllowOrigins": ["*"], "AllowMethods": ["POST"],
             "AllowHeaders": ["content-type", "x-api-key", "x-session-id"], "MaxAge": 86400}
@@ -120,6 +124,7 @@ def ensure_url(lam) -> str:
     return url
 
 
+# Deploy public endpoint
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rotate-key", action="store_true", help="issue a new API key")

@@ -45,6 +45,7 @@ SECTION_TYPES: list[tuple[str, tuple[str, ...]]] = [
 ]
 
 
+# Label section type
 def classify_section(path: list[str]) -> str:
     for heading in reversed(path):  # most specific heading first
         h = heading.lower().replace(" ", "")  # tolerate kerning-split text: "S y n o psis"
@@ -54,6 +55,7 @@ def classify_section(path: list[str]) -> str:
     return "other"
 
 
+# One paragraph
 @dataclass
 class Paragraph:
     text: str
@@ -61,11 +63,13 @@ class Paragraph:
     page_end: int
 
 
+# One document section
 @dataclass
 class Section:
     path: list[str]
     paragraphs: list[Paragraph] = field(default_factory=list)
 
+    # Section label
     @property
     def section_type(self) -> str:
         return classify_section(self.path)
@@ -79,6 +83,7 @@ _UNITS = {"mg", "g", "kg", "mcg", "µg", "ml", "l", "gy", "iu", "units", "mmol",
           "calendar", "minutes", "min", "x", "times", "cycles", "doses"}
 
 
+# Real numbered heading?
 def _real_numbered(text: str, m: re.Match) -> bool:
     """'5.2 Dose Modifications' yes; '50 mg', '31 January 2025', '20 Gy' no."""
     number, title = m.group(1), m.group(2)
@@ -91,11 +96,13 @@ def _real_numbered(text: str, m: re.Match) -> bool:
     return has_dot or title.isupper() or len(title.split()) >= 2
 
 
+# Prose follows?
 def _followed_by_prose(line: Line, nxt: Line | None) -> bool:
     """Table cells are short, bold, and followed by more short cells; real headings by prose."""
     return nxt is not None and nxt.block != line.block and not nxt.bold and len(nxt.text) >= 40
 
 
+# Detect heading level
 def _heading_level(line: Line, body_size: float, nxt: Line | None = None) -> int | None:
     """Return heading level (1 = top) or None if the line is body text."""
     text = line.text.strip()
@@ -131,6 +138,7 @@ def _heading_level(line: Line, body_size: float, nxt: Line | None = None) -> int
     return None
 
 
+# Group into sections
 def sectionize(doc: ExtractedDoc) -> tuple[list[Section], int]:
     """Returns sections and the number of headings detected."""
     sections: list[Section] = [Section(path=["Front matter"])]
@@ -138,6 +146,7 @@ def sectionize(doc: ExtractedDoc) -> tuple[list[Section], int]:
     headings = 0
     cur_block, cur_lines, cur_pages = None, [], []
 
+    # Finish paragraph
     def flush():
         nonlocal cur_lines, cur_pages
         if cur_lines:

@@ -33,11 +33,13 @@ _sessions: dict[str, tuple[ProtocolAgent, threading.Lock]] = {}
 _sessions_lock = threading.Lock()
 
 
+# Chat request body
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=4000)
     session_id: str | None = None
 
 
+# Get session agent
 def _session(session_id: str | None) -> tuple[str, ProtocolAgent, threading.Lock]:
     with _sessions_lock:
         if session_id not in _sessions:
@@ -49,16 +51,19 @@ def _session(session_id: str | None) -> tuple[str, ProtocolAgent, threading.Lock
     return session_id, agent, lock
 
 
+# Chat page
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(STATIC / "index.html")
 
 
+# Model info
 @app.get("/api/info")
 def info() -> dict:
     return {"model": get_settings().bedrock_model_id}
 
 
+# Answer chat message
 @app.post("/api/chat")
 def chat(req: ChatRequest) -> dict:  # sync def: FastAPI runs it in a worker thread
     session_id, agent, lock = _session(req.session_id)
@@ -72,6 +77,7 @@ def chat(req: ChatRequest) -> dict:  # sync def: FastAPI runs it in a worker thr
         lock.release()
 
 
+# Clear conversation
 @app.delete("/api/chat/{session_id}")
 def reset(session_id: str) -> dict:
     with _sessions_lock:
@@ -79,6 +85,7 @@ def reset(session_id: str) -> dict:
     return {"reset": True}
 
 
+# Serve uploaded PDF
 @app.get("/documents/{sha256}.pdf")
 def document(sha256: str) -> FileResponse:
     """Citation link target for uploaded PDFs that have no public URL."""
@@ -94,13 +101,16 @@ _jobs: dict[str, dict] = {}
 _worker = ThreadPoolExecutor(max_workers=1)  # uploads are indexed one at a time, in order
 
 
+# Check admin key
 def require_admin(x_admin_key: str | None = Header(default=None)) -> None:
     expected = os.getenv("ADMIN_API_KEY", "").strip()
     if expected and not hmac.compare_digest(x_admin_key or "", expected):
         raise HTTPException(401, "Missing or wrong admin key")
 
 
+# Run upload job
 def _run_job(job: dict, data: bytes, fields: dict) -> None:
+    # Record progress
     def step(msg: str) -> None:
         job["steps"].append({"at": datetime.now(UTC).isoformat(timespec="seconds"),
                              "message": msg})
@@ -114,22 +124,26 @@ def _run_job(job: dict, data: bytes, fields: dict) -> None:
         job.update(status="failed", error=f"{type(e).__name__}: {e}")
 
 
+# Admin page
 @app.get("/admin")
 def admin_page() -> FileResponse:
     return FileResponse(STATIC / "admin.html")
 
 
+# Admin settings
 @app.get("/api/admin/info", dependencies=[Depends(require_admin)])
 def admin_info() -> dict:
     return {"therapeutic_areas": onboard.THERAPEUTIC_AREAS, "max_mb": onboard.MAX_BYTES // 2**20,
             "s3_bucket": get_settings().s3_bucket}
 
 
+# List documents
 @app.get("/api/admin/documents", dependencies=[Depends(require_admin)])
 def admin_documents() -> dict:
     return onboard.list_documents()
 
 
+# Queue PDF upload
 @app.post("/api/admin/documents", status_code=202, dependencies=[Depends(require_admin)])
 def admin_upload(file: UploadFile = File(...), nct_id: str = Form(...),
                  document_title: str = Form(""), document_version: str = Form(""),
@@ -151,6 +165,7 @@ def admin_upload(file: UploadFile = File(...), nct_id: str = Form(...),
     return job
 
 
+# Get job status
 @app.get("/api/admin/jobs/{job_id}", dependencies=[Depends(require_admin)])
 def admin_job(job_id: str) -> dict:
     if job_id not in _jobs:
@@ -158,6 +173,7 @@ def admin_job(job_id: str) -> dict:
     return _jobs[job_id]
 
 
+# Delete document
 @app.delete("/api/admin/documents/{sha256}", dependencies=[Depends(require_admin)])
 def admin_delete(sha256: str) -> dict:
     try:
@@ -166,6 +182,7 @@ def admin_delete(sha256: str) -> dict:
         raise HTTPException(400, str(e)) from e
 
 
+# Publish to S3
 @app.post("/api/admin/publish", dependencies=[Depends(require_admin)])
 def admin_publish() -> dict:
     try:

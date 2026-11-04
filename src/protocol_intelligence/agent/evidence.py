@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 _REF = re.compile(r"\[(S\d+)\]")
 
 
+# Format citation text
 def citation_label(p: dict) -> str:
     if p["source_type"] in ("registry_query", "graph"):
         return p["section_path"]
@@ -24,11 +25,13 @@ def citation_label(p: dict) -> str:
     return f"{p['nct_id']}, {where}, section \"{p['section_path']}\""
 
 
+# Track cited sources
 @dataclass
 class EvidenceLedger:
     by_ref: dict[str, dict] = field(default_factory=dict)
     _by_chunk: dict[str, str] = field(default_factory=dict)
 
+    # Assign source ref
     def register(self, passage: dict) -> str:
         """Return the existing ref for this chunk, or assign the next one."""
         cid = passage["chunk_id"]
@@ -38,6 +41,7 @@ class EvidenceLedger:
             self.by_ref[ref] = passage
         return self._by_chunk[cid]
 
+    # Expand citations
     def resolve(self, answer: str) -> dict:
         """Citations actually used in the answer, in order of first appearance."""
         used, unknown = [], []

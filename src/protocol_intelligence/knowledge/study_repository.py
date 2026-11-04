@@ -40,11 +40,13 @@ _UNIT_YEARS = {"year": 1, "month": 1 / 12, "week": 1 / 52, "day": 1 / 365, "hour
                "minute": 1 / 525600}
 
 
+# Convert age
 def age_years(text: str | None) -> float | None:
     m = _AGE.search(text or "")
     return round(float(m.group(1)) * _UNIT_YEARS[m.group(2).lower()], 3) if m else None
 
 
+# Read study records
 def read_records(*paths: Path) -> list[dict]:
     """Canonical study records from one or more JSONL files; later files win on duplicate IDs."""
     records = {}
@@ -56,6 +58,7 @@ def read_records(*paths: Path) -> list[dict]:
     return list(records.values())
 
 
+# Build SQLite database
 def build(*studies_jsonl: Path, db_path: Path = DB_PATH) -> int:
     """(Re)build the database. Written to a temp file and swapped in, so readers never see it half-built."""
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -111,15 +114,18 @@ LIST_COLUMNS = ["nct_id", "brief_title", "overall_status", "phase", "therapeutic
                 "enrollment_count", "lead_sponsor", "study_start", "source_record_url"]
 
 
+# Open read-only
 def _connect(db_path: Path = DB_PATH) -> sqlite3.Connection:
     con = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)  # read-only for queries
     con.row_factory = sqlite3.Row
     return con
 
 
+# Build SQL filters
 def _where(filters: dict) -> tuple[list[str], list]:
     clauses, params = [], []
 
+    # Add IN filter
     def any_in(col: str, values) -> None:
         values = [values] if isinstance(values, str | int) else list(values)
         clauses.append(f"{col} IN ({','.join('?' * len(values))})")
@@ -173,6 +179,7 @@ def _where(filters: dict) -> tuple[list[str], list]:
     return clauses, params
 
 
+# Count, list, group
 def query_cohort(filters: dict | None = None, group_by: str | None = None,
                  limit: int = 100, db_path: Path = DB_PATH) -> dict:
     """Count/list/aggregate studies. Returns rows plus the exact filters applied."""
@@ -205,6 +212,7 @@ def query_cohort(filters: dict | None = None, group_by: str | None = None,
                 "truncated": total > len(rows)}
 
 
+# Fetch study details
 def get_studies(nct_ids: list[str], db_path: Path = DB_PATH) -> list[dict]:
     """Full canonical metadata for specific studies (get_study_metadata tool)."""
     with _connect(db_path) as con:

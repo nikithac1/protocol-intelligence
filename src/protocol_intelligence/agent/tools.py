@@ -24,19 +24,23 @@ _PASSAGE_COLS = ["chunk_id", "nct_id", "source_type", "document_title", "section
                  "extraction_confidence"]
 
 
+# Normalize to list
 def _as_list(v) -> list[str] | None:
     if v in (None, "", []):
         return None
     return [v] if isinstance(v, str) else list(v)
 
 
+# Format passage
 def _passage_out(ledger: EvidenceLedger, p: dict) -> dict:
     return {"ref": ledger.register(p), "cite_as": citation_label(p), "nct_id": p["nct_id"],
             "section_type": p["section_type"], "extraction_confidence": p["extraction_confidence"],
             "text": p["text"]}
 
 
+# Create agent tools
 def make_tools(ledger: EvidenceLedger) -> list:
+    # Search text
     @tool
     def search_protocols(query: str, nct_ids: list[str] | None = None,
                          section_types: list[str] | None = None,
@@ -74,6 +78,7 @@ def make_tools(ledger: EvidenceLedger) -> list:
                                "or remove filters before concluding the corpus lacks this."})
         return json.dumps({"passages": [_passage_out(ledger, h) for h in hits]})
 
+    # Read nearby text
     @tool
     def get_source_passage(chunk_ref: str, neighbors: int = 1) -> str:
         """Read a cited passage with the text immediately before and after it in the same document.
@@ -101,6 +106,7 @@ def make_tools(ledger: EvidenceLedger) -> list:
         window = same_doc[max(0, idx - n): idx + n + 1]
         return json.dumps({"passages": [_passage_out(ledger, r) for r in window]})
 
+    # Get study facts
     @tool
     def get_study_metadata(nct_ids: list[str]) -> str:
         """Structured registry facts for specific studies: title, phase, status, enrollment,
@@ -124,6 +130,7 @@ def make_tools(ledger: EvidenceLedger) -> list:
             out.append(rec)
         return json.dumps({"studies": out}, default=str)
 
+    # Count and filter
     @tool
     def query_study_cohort(filters: dict | None = None, group_by: str | None = None,
                            limit: int = 25) -> str:
@@ -160,6 +167,7 @@ def make_tools(ledger: EvidenceLedger) -> list:
             "extraction_confidence": "high"})
         return json.dumps(result, default=str)
 
+    # Query study links
     @tool
     def query_trial_graph(question_type: str, nct_id: str | None = None,
                           other_nct_id: str | None = None, kind: str | None = None,

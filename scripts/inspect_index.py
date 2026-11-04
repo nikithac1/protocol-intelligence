@@ -16,11 +16,13 @@ from protocol_intelligence.knowledge.study_repository import DB_PATH
 from protocol_intelligence.retrieval.index import LOCAL_URI, TABLE
 
 
+# Measure size
 def size_mb(path: Path) -> float:
     files = [path] if path.is_file() else [p for p in path.rglob("*") if p.is_file()]
     return sum(p.stat().st_size for p in files) / 1e6
 
 
+# Show pipeline outputs
 def main() -> int:
     sys.stdout.reconfigure(encoding="utf-8")
     print(f"== Files under {DATA_DIR}")

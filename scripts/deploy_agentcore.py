@@ -45,6 +45,7 @@ PYTHON = "3.12"
 MAX_ZIP_MB = 250
 
 
+# Wait until ready
 def wait(describe, done: set[str], failed: set[str], what: str, timeout: int = 900) -> dict:
     t0 = time.time()
     while True:
@@ -61,6 +62,7 @@ def wait(describe, done: set[str], failed: set[str], what: str, timeout: int = 9
 
 
 # ------------------------------------------------------------------ 1. memory
+# Create chat memory
 def ensure_memory(ctl) -> str:
     existing = get_settings().agentcore_memory_id
     for page in ctl.get_paginator("list_memories").paginate():
@@ -76,6 +78,7 @@ def ensure_memory(ctl) -> str:
 
 
 # ------------------------------------------------------------------ 2. role
+# Create runtime role
 def ensure_role(account: str, region: str, memory_id: str, data_bucket: str) -> str:
     iam = client("iam")
     trust = {"Version": "2012-10-17", "Statement": [{
@@ -145,6 +148,7 @@ def ensure_role(account: str, region: str, memory_id: str, data_bucket: str) -> 
 
 
 # ------------------------------------------------------------------ 3. package
+# Install Linux packages
 def build_dependencies(force: bool) -> Path:
     deps = BUILD / "deps"
     stamp = BUILD / "deps.sha256"
@@ -161,6 +165,7 @@ def build_dependencies(force: bool) -> Path:
     return deps
 
 
+# Create deployment zip
 def build_zip(deps: Path) -> Path:
     out = BUILD / "deployment.zip"
     out.unlink(missing_ok=True)
@@ -180,6 +185,7 @@ def build_zip(deps: Path) -> Path:
     return out
 
 
+# Upload zip
 def upload_zip(zip_path: Path, data_bucket: str) -> str:
     digest = hashlib.sha256(zip_path.read_bytes()).hexdigest()[:16]
     key = f"deploy/agentcore/{NAME}-{digest}.zip"
@@ -189,6 +195,7 @@ def upload_zip(zip_path: Path, data_bucket: str) -> str:
 
 
 # ------------------------------------------------------------------ 4. runtime
+# Create, update runtime
 def deploy_runtime(ctl, role_arn: str, data_bucket: str, key: str, memory_id: str) -> str:
     s = get_settings()
     spec = dict(
@@ -226,6 +233,7 @@ def deploy_runtime(ctl, role_arn: str, data_bucket: str, key: str, memory_id: st
     return info["agentRuntimeArn"]
 
 
+# Deploy the agent
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--rebuild-deps", action="store_true")

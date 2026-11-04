@@ -25,6 +25,7 @@ from protocol_intelligence.processing.pipeline import process_pdf as _process  #
 from protocol_intelligence.processing.registry_chunks import registry_chunks  # noqa: E402
 
 
+# Chunk one PDF
 def process_pdf(doc: dict, title: str) -> tuple[list[dict], dict]:
     doc_key = Path(doc["filename"]).stem.lower()
     chunks, status, outline = _process(
@@ -40,6 +41,7 @@ def process_pdf(doc: dict, title: str) -> tuple[list[dict], dict]:
     return chunks, status
 
 
+# Chunk all documents
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--only", help="process a single NCT ID")

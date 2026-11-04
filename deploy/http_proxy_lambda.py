@@ -26,11 +26,13 @@ RUNTIME_URL = (f"https://bedrock-agentcore.{REGION}.amazonaws.com/runtimes/"
 SESSION = boto3.Session()
 
 
+# Build HTTP response
 def _reply(status: int, body) -> dict:
     return {"statusCode": status, "headers": {"Content-Type": "application/json"},
             "body": body if isinstance(body, str) else json.dumps(body)}
 
 
+# Check key, forward
 def handler(event, context):
     headers = {k.lower(): v for k, v in (event.get("headers") or {}).items()}
     if not hmac.compare_digest(headers.get("x-api-key", ""), API_KEY):

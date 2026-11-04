@@ -11,6 +11,7 @@ from protocol_intelligence.processing.sectionize import sectionize
 MIN_HEADINGS_FOR_SECTIONS = 5
 
 
+# PDF to chunks
 def process_pdf(path: Path, *, nct_id: str, doc_key: str, document_title: str,
                 document_version: str, source_url: str, sha256: str
                 ) -> tuple[list[dict], dict, list[dict]]:

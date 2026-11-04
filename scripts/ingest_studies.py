@@ -33,12 +33,14 @@ from protocol_intelligence.ingestion.study_selector import (  # noqa: E402
 )
 
 
+# Write coverage report
 def write_report(manifest: dict, path: Path) -> None:
     studies = manifest["studies"]
     docs = [d for s in studies for d in s["documents"]]
     doc_status = Counter(d["status"] for d in docs)
     with_pdf = sum(1 for s in studies if any(d["status"] == "downloaded" for d in s["documents"]))
 
+    # Format count table
     def table(counter: Counter, title: str) -> list[str]:
         rows = [f"### {title}", "", "| Value | Studies |", "|---|---|"]
         rows += [f"| {k} | {v} |" for k, v in sorted(counter.items())]
@@ -70,6 +72,7 @@ def write_report(manifest: dict, path: Path) -> None:
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+# Download study corpus
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--total", type=int, default=100)

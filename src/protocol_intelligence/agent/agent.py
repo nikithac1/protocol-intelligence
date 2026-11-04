@@ -15,6 +15,7 @@ from protocol_intelligence.agent.tools import make_tools
 from protocol_intelligence.config import aws_session, get_settings
 
 
+# Configure Claude
 def bedrock_model() -> BedrockModel:
     return BedrockModel(
         boto_session=aws_session(),
@@ -24,6 +25,7 @@ def bedrock_model() -> BedrockModel:
     )
 
 
+# One conversation
 @dataclass
 class ProtocolAgent:
     """One conversation: the Strands agent plus the evidence ledger its tools write to."""
@@ -32,11 +34,13 @@ class ProtocolAgent:
     verbose: bool = False
     session_manager: object = None  # e.g. AgentCore Memory; restores history for this session
 
+    # Create Strands agent
     def __post_init__(self):
         self.agent = Agent(model=bedrock_model(), system_prompt=SYSTEM_PROMPT,
                            tools=make_tools(self.ledger), session_manager=self.session_manager,
                            callback_handler=None if not self.verbose else _print_tools)
 
+    # Answer one question
     def ask(self, question: str) -> dict:
         t0 = time.time()
         before = self._totals()
@@ -50,6 +54,7 @@ class ProtocolAgent:
                 "tokens": {"input": after["input"] - before["input"],
                            "output": after["output"] - before["output"]}}
 
+    # Read usage totals
     def _totals(self) -> dict:
         m = self.agent.event_loop_metrics
         return {"tools": {name: t.call_count for name, t in m.tool_metrics.items()},
@@ -57,6 +62,7 @@ class ProtocolAgent:
                 "output": m.accumulated_usage.get("outputTokens", 0)}
 
 
+# Print tool calls
 def _print_tools(**event):
     msg = event.get("message")
     if msg and msg.get("role") == "assistant":

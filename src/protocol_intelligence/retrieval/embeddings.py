@@ -19,23 +19,27 @@ MAX_CHARS = 30_000  # Titan v2 accepts 8k tokens; chunks are far smaller, this i
 CACHE_PATH = DATA_DIR / "index" / "embedding_cache.parquet"
 
 
+# Bedrock client
 @lru_cache
 def _runtime():
     cfg = Config(retries={"max_attempts": 10, "mode": "adaptive"}, max_pool_connections=16)
     return aws_session().client("bedrock-runtime", config=cfg)
 
 
+# Build cache key
 def _cache_key(text: str) -> str:
     model = get_settings().bedrock_embedding_model_id
     return hashlib.sha256(f"{model}|{DIMENSIONS}|{text}".encode()).hexdigest()
 
 
+# Embed one text
 def embed_one(text: str) -> list[float]:
     body = json.dumps({"inputText": text[:MAX_CHARS], "dimensions": DIMENSIONS, "normalize": True})
     resp = _runtime().invoke_model(modelId=get_settings().bedrock_embedding_model_id, body=body)
     return json.loads(resp["body"].read())["embedding"]
 
 
+# Load vector cache
 def _load_cache(path: Path) -> dict[str, list[float]]:
     if not path.exists():
         return {}
@@ -43,11 +47,13 @@ def _load_cache(path: Path) -> dict[str, list[float]]:
     return dict(zip(t.column("key").to_pylist(), t.column("vector").to_pylist()))
 
 
+# Save vector cache
 def _save_cache(path: Path, cache: dict[str, list[float]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(pa.table({"key": list(cache), "vector": list(cache.values())}), path)
 
 
+# Embed with cache
 def embed_many(texts: list[str], workers: int = 8, progress=None) -> list[list[float]]:
     """Embed texts, reusing cached vectors; returns vectors in input order."""
     cache = _load_cache(CACHE_PATH)

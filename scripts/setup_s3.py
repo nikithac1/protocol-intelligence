@@ -18,6 +18,7 @@ from protocol_intelligence.storage import default_bucket_name  # noqa: E402
 TAGS = [{"Key": "Project", "Value": "ProtocolIntelligence"}, {"Key": "Environment", "Value": "dev"}]
 
 
+# Save setting
 def save_env(name: str, value: str) -> None:
     env = PROJECT_ROOT / ".env"
     lines = env.read_text(encoding="utf-8").splitlines()
@@ -27,6 +28,7 @@ def save_env(name: str, value: str) -> None:
     env.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+# Create secure bucket
 def main() -> int:
     s3 = client("s3")
     region = get_settings().aws_region

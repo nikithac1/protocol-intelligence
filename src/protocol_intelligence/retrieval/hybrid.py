@@ -15,6 +15,7 @@ CANDIDATES = 40
 _SAFE = re.compile(r"^[A-Za-z0-9_\- ]+$")
 
 
+# Safe SQL list
 def _sql_list(values: list[str]) -> str:
     for v in values:
         if not _SAFE.match(v):  # filters come from the model; never interpolate anything odd
@@ -22,6 +23,7 @@ def _sql_list(values: list[str]) -> str:
     return ", ".join(f"'{v}'" for v in values)
 
 
+# Build search filter
 def build_filter(nct_ids=None, section_types=None, source_types=None, therapeutic_areas=None) -> str | None:
     parts = []
     if nct_ids:
@@ -35,11 +37,13 @@ def build_filter(nct_ids=None, section_types=None, source_types=None, therapeuti
     return " AND ".join(parts) or None
 
 
+# Clean keyword query
 def _fts_query(query: str) -> str:
     # Plain words only: strips characters the FTS parser treats as operators.
     return " ".join(re.findall(r"[A-Za-z0-9]+", query))
 
 
+# Hybrid search
 def search(query: str, k: int = 8, nct_ids: list[str] | None = None,
            section_types: list[str] | None = None, source_types: list[str] | None = None,
            therapeutic_areas: list[str] | None = None, mode: str = "hybrid") -> list[dict]:
@@ -49,6 +53,7 @@ def search(query: str, k: int = 8, nct_ids: list[str] | None = None,
             "page_start", "page_end", "source_url", "text", "extraction_confidence"]
     ranked: dict[str, dict] = {}
 
+    # Add rank scores
     def add(results: list[dict], label: str) -> None:
         for rank, r in enumerate(results, 1):
             entry = ranked.setdefault(r["chunk_id"], {**{c: r[c] for c in cols}, "score": 0.0,

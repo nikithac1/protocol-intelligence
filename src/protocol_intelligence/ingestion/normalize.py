@@ -5,10 +5,12 @@ from __future__ import annotations
 from protocol_intelligence.ingestion.clinicaltrials_client import protocol_doc_url, study_page_url
 
 
+# Read date
 def _date(module: dict, key: str) -> str | None:
     return (module.get(key) or {}).get("date")
 
 
+# Clean outcomes
 def _outcomes(items: list[dict] | None) -> list[dict]:
     return [
         {"measure": o.get("measure"), "description": o.get("description"),
@@ -17,6 +19,7 @@ def _outcomes(items: list[dict] | None) -> list[dict]:
     ]
 
 
+# List protocol PDFs
 def protocol_docs(raw: dict) -> list[dict]:
     nct = raw["protocolSection"]["identificationModule"]["nctId"]
     docs = (raw.get("documentSection") or {}).get("largeDocumentModule", {}).get("largeDocs", [])
@@ -26,6 +29,7 @@ def protocol_docs(raw: dict) -> list[dict]:
     ]
 
 
+# Clean study record
 def canonical_record(raw: dict, api_version: str, retrieved_at: str) -> dict:
     ps = raw["protocolSection"]
     ident = ps["identificationModule"]

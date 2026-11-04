@@ -18,16 +18,19 @@ import httpx  # noqa: E402
 from protocol_intelligence import config  # noqa: E402
 
 
+# Shorten error
 def _short(err: Exception) -> str:
     msg = str(err)
     return msg.split(" because ")[0][:160]
 
 
+# Check AWS login
 def check_identity(s):
     ident = config.client("sts").get_caller_identity()
     return f"{ident['Arn']} (account {ident['Account']})"
 
 
+# List Claude models
 def check_bedrock_list(s):
     profiles = config.client("bedrock").list_inference_profiles(maxResults=100)
     ids = [p["inferenceProfileId"] for p in profiles["inferenceProfileSummaries"]]
@@ -36,6 +39,7 @@ def check_bedrock_list(s):
     return f"{len(claude)} Claude inference profiles; {s.bedrock_model_id} {configured}"
 
 
+# Test Claude call
 def check_bedrock_chat(s):
     resp = config.client("bedrock-runtime").converse(
         modelId=s.bedrock_model_id,
@@ -47,6 +51,7 @@ def check_bedrock_chat(s):
     return f"{s.bedrock_model_id} replied {text[:20]!r} via {auth}"
 
 
+# Test Titan call
 def check_bedrock_embed(s):
     resp = config.client("bedrock-runtime").invoke_model(
         modelId=s.bedrock_embedding_model_id,
@@ -56,11 +61,13 @@ def check_bedrock_embed(s):
     return f"{s.bedrock_embedding_model_id} -> {dims}-dim vector"
 
 
+# Check AgentCore access
 def check_agentcore(s):
     runtimes = config.client("bedrock-agentcore-control").list_agent_runtimes()
     return f"{len(runtimes.get('agentRuntimes', []))} agent runtimes visible"
 
 
+# Check trials API
 def check_ctgov(s):
     r = httpx.get(f"{s.ctgov_api_base}/studies", params={"pageSize": 1}, timeout=20)
     r.raise_for_status()
@@ -68,6 +75,7 @@ def check_ctgov(s):
     return f"API v2 reachable (sample {nct})"
 
 
+# Run all checks
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-invoke", action="store_true", help="skip paid model calls")

@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from protocol_intelligence import storage  # noqa: E402
 
 
+# Sync with S3
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("direction", choices=["up", "down"])

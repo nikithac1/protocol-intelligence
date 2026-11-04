@@ -39,6 +39,7 @@ PREFIX = "index/graph/"
 MEMORY_GB = 16  # smallest size: $0.48/h running, $0.048/h paused (us-east-1, Nov 2026)
 
 
+# Create import role
 def ensure_role(account: str) -> str:
     iam = client("iam")
     # Neptune's import does not pass aws:SourceAccount, so a condition on it blocks the role.
@@ -73,6 +74,7 @@ def ensure_role(account: str) -> str:
     return arn
 
 
+# Find graph
 def find_graph(ng) -> dict | None:
     for page in ng.get_paginator("list_graphs").paginate():
         for g in page["graphs"]:
@@ -81,6 +83,7 @@ def find_graph(ng) -> dict | None:
     return None
 
 
+# Get graph ID
 def graph_id(ng) -> str:
     g = find_graph(ng)
     if not g:
@@ -88,6 +91,7 @@ def graph_id(ng) -> str:
     return g["id"]
 
 
+# Create graph
 def ensure_graph(ng) -> str:
     if g := find_graph(ng):
         print(f"Graph exists: {g['id']} ({g['status']})")
@@ -103,6 +107,7 @@ def ensure_graph(ng) -> str:
     return gid
 
 
+# Reload graph data
 def load(ng, gid: str, role_arn: str) -> None:
     info = ng.get_graph(graphIdentifier=gid)
     if info.get("status") != "AVAILABLE":
@@ -123,6 +128,7 @@ def load(ng, gid: str, role_arn: str) -> None:
         print(f"  {row['label']:<13} {row['n']:>4} nodes")
 
 
+# Run Neptune action
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("action", choices=["role", "up", "load", "status", "pause", "resume", "delete"])

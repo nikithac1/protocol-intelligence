@@ -16,12 +16,14 @@ from protocol_intelligence.config import DATA_DIR, client, get_settings
 SKIP_SUFFIXES = {".log", ".tmp"}
 
 
+# Default bucket name
 def default_bucket_name() -> str:
     s = get_settings()
     account = client("sts").get_caller_identity()["Account"]
     return f"protocol-intelligence-{account}-{s.aws_region}"
 
 
+# Get bucket name
 def bucket() -> str:
     name = get_settings().s3_bucket
     if not name:
@@ -29,6 +31,7 @@ def bucket() -> str:
     return name
 
 
+# Hash file
 def _sha256(path: Path) -> str:
     h = hashlib.sha256()
     with path.open("rb") as f:
@@ -37,6 +40,7 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+# List local files
 def _local_files(prefix: str = "") -> Iterator[tuple[Path, str]]:
     root = DATA_DIR / prefix if prefix else DATA_DIR
     files = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
@@ -46,6 +50,7 @@ def _local_files(prefix: str = "") -> Iterator[tuple[Path, str]]:
         yield path, path.relative_to(DATA_DIR).as_posix()
 
 
+# Get S3 hash
 def _remote_sha(s3, bucket_name: str, key: str) -> str | None:
     try:
         return s3.head_object(Bucket=bucket_name, Key=key)["Metadata"].get("sha256")
@@ -55,6 +60,7 @@ def _remote_sha(s3, bucket_name: str, key: str) -> str | None:
         raise
 
 
+# Upload changed files
 def upload(prefix: str = "", dry_run: bool = False) -> dict:
     """Upload data-local/<prefix> to S3, skipping files whose SHA-256 already matches."""
     s3, name = client("s3"), bucket()
@@ -71,6 +77,7 @@ def upload(prefix: str = "", dry_run: bool = False) -> dict:
     return stats
 
 
+# Download changed files
 def download(prefix: str = "") -> dict:
     """Pull s3://bucket/<prefix> into data-local/ (e.g. on a fresh machine or in the runtime)."""
     s3, name = client("s3"), bucket()

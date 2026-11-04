@@ -30,10 +30,12 @@ for _name in ("AWS_PROFILE", "AWS_BEARER_TOKEN_BEDROCK"):
         os.environ.pop(_name)
 
 
+# Read setting
 def _env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
 
+# App settings
 @dataclass(frozen=True)
 class Settings:
     aws_profile: str
@@ -47,11 +49,13 @@ class Settings:
     graph_backend: str  # local (CSV files under index/graph), neptune, or off
     neptune_graph_id: str
 
+    # Check Bedrock key
     @property
     def has_bedrock_api_key(self) -> bool:
         return bool(_env("AWS_BEARER_TOKEN_BEDROCK"))
 
 
+# Load settings
 @lru_cache
 def get_settings() -> Settings:
     return Settings(
@@ -70,6 +74,7 @@ def get_settings() -> Settings:
     )
 
 
+# Create AWS session
 @lru_cache
 def aws_session() -> boto3.Session:
     """boto3 session for the project profile; falls back to the default credential chain."""
@@ -77,6 +82,7 @@ def aws_session() -> boto3.Session:
     return boto3.Session(profile_name=s.aws_profile or None, region_name=s.aws_region)
 
 
+# Create AWS client
 def client(service: str):
     """Shortcut: config.client("s3"), config.client("bedrock-runtime"), ..."""
     return aws_session().client(service)

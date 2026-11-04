@@ -19,6 +19,7 @@ from protocol_intelligence.knowledge import study_repository  # noqa: E402
 from protocol_intelligence.retrieval import index  # noqa: E402
 
 
+# Build both databases
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--studies-only", action="store_true")

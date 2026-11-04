@@ -38,6 +38,7 @@ _agents: dict[str, ProtocolAgent] = {}
 _lock = threading.Lock()
 
 
+# Get session agent
 def _agent_for(session_id: str, user_id: str) -> ProtocolAgent:
     with _lock:
         if session_id not in _agents:
@@ -55,6 +56,7 @@ def _agent_for(session_id: str, user_id: str) -> ProtocolAgent:
         return _agents[session_id]
 
 
+# Handle cloud request
 @app.entrypoint
 def invoke(payload: dict, context: RequestContext) -> dict:
     prompt = (payload or {}).get("prompt", "").strip()

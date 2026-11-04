@@ -9,6 +9,7 @@ from __future__ import annotations
 from protocol_intelligence.processing.chunk import RawChunk, build_chunk_record
 
 
+# Format outcomes
 def _outcomes(items: list[dict]) -> str:
     return "\n".join(
         f"- {o['measure']}" + (f" (time frame: {o['time_frame']})" if o.get("time_frame") else "")
@@ -17,6 +18,7 @@ def _outcomes(items: list[dict]) -> str:
     )
 
 
+# Registry to chunks
 def registry_chunks(rec: dict) -> list[dict]:
     nct = rec["nct_id"]
     header = f"{nct}: {rec['brief_title']}"

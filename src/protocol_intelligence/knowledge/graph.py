@@ -43,12 +43,14 @@ _NCT = re.compile(r"^NCT\d{8}$")
 _INT_PROPS = {"enrollment"}
 
 
+# Graph not available
 class GraphUnavailable(RuntimeError):
     """The graph has not been built, or Neptune could not be reached."""
 
 
 # --- build ---------------------------------------------------------------------------------
 
+# Create nodes, edges
 def build(records: list[dict]) -> tuple[dict[str, dict[str, dict]], list[tuple[str, str, str]]]:
     """Nodes by label ({node id: properties}) and (start id, edge type, end id) edges."""
     nodes: dict[str, dict[str, dict]] = {label: {} for label in ("Study", "Area", *LINKS)}
@@ -76,6 +78,7 @@ def build(records: list[dict]) -> tuple[dict[str, dict[str, dict]], list[tuple[s
     return nodes, sorted(edges)
 
 
+# Save graph CSVs
 def write_csv(nodes: dict[str, dict[str, dict]], edges: list[tuple[str, str, str]],
               out_dir: Path = GRAPH_DIR) -> dict:
     """One openCypher CSV per node label plus edges.csv. Replaces any previous build."""
@@ -103,25 +106,31 @@ def write_csv(nodes: dict[str, dict[str, dict]], edges: list[tuple[str, str, str
 
 # --- backends ------------------------------------------------------------------------------
 
+# In-memory graph
 class _Graph:
     """The CSV files held in memory: properties, labels and edges in both directions."""
 
+    # Empty graph
     def __init__(self):
         self.props: dict[str, dict] = {}
         self.label: dict[str, str] = {}
         self.out: dict[str, set] = defaultdict(set)   # node -> {(edge type, end node)}
         self.into: dict[str, set] = defaultdict(set)  # node -> {(edge type, start node)}
 
+    # Node display name
     def name(self, nid: str) -> str:
         p = self.props[nid]
         return p.get("nct_id") or p["name"]
 
+    # Nodes by type
     def by_label(self, label: str) -> list[str]:
         return [nid for nid, lab in self.label.items() if lab == label]
 
+    # Linked studies
     def studies_of(self, nid: str) -> list[str]:
         return [s for _, s in self.into[nid]]
 
+    # Adjacent nodes
     def neighbours(self, nid: str) -> list[str]:
         """Study <-> linked entity, ignoring areas (every study in an area would be 2 hops)."""
         if self.label[nid] == "Study":
@@ -129,6 +138,7 @@ class _Graph:
         return sorted(self.studies_of(nid))
 
 
+# Load CSV graph
 @lru_cache
 def _local(graph_dir: Path) -> _Graph:
     files = sorted(graph_dir.glob("nodes_*.csv"))
@@ -152,10 +162,12 @@ def _local(graph_dir: Path) -> _Graph:
     return g
 
 
+# Using Neptune?
 def _neptune() -> bool:
     return get_settings().graph_backend == "neptune"
 
 
+# Run Neptune query
 def _cypher(query: str, **params) -> list[dict]:
     graph_id = get_settings().neptune_graph_id
     if not graph_id:
@@ -168,6 +180,7 @@ def _cypher(query: str, **params) -> list[dict]:
     return json.loads(resp["payload"].read())["results"]
 
 
+# Graph available?
 def enabled() -> bool:
     backend = get_settings().graph_backend
     return backend == "neptune" or (backend == "local" and (GRAPH_DIR / "edges.csv").exists())
@@ -177,6 +190,7 @@ def enabled() -> bool:
 # Each runs as openCypher on Neptune or in Python on the local graph and returns the same rows.
 # Sorting and limits are applied afterwards in Python so both backends order rows identically.
 
+# Check NCT ID
 def _nct(value: str | None) -> str:
     nct = (value or "").strip().upper()
     if not _NCT.match(nct):
@@ -184,6 +198,7 @@ def _nct(value: str | None) -> str:
     return nct
 
 
+# Check node kind
 def _label(kind: str | None) -> str:
     label = KINDS.get((kind or "").strip().lower())
     if not label:
@@ -191,6 +206,7 @@ def _label(kind: str | None) -> str:
     return label
 
 
+# Find related studies
 def related_studies(nct_id: str, limit: int = 10) -> list[dict]:
     """Other studies sharing an intervention, condition or sponsor, most overlap first."""
     nct_id = _nct(nct_id)
@@ -217,6 +233,7 @@ def related_studies(nct_id: str, limit: int = 10) -> list[dict]:
     return rows[:limit]
 
 
+# Shared across areas
 def shared_across_areas(kind: str, min_areas: int = 2, limit: int = 10) -> list[dict]:
     """Interventions, conditions or sponsors whose studies span several therapeutic areas."""
     label = _label(kind)
@@ -235,6 +252,7 @@ def shared_across_areas(kind: str, min_areas: int = 2, limit: int = 10) -> list[
     return rows[:limit]
 
 
+# Shared within area
 def shared_within_area(therapeutic_area: str, kind: str, limit: int = 10) -> list[dict]:
     """Interventions, conditions or sponsors shared by two or more studies of one area."""
     label, area = _label(kind), (therapeutic_area or "").strip().lower()
@@ -251,6 +269,7 @@ def shared_within_area(therapeutic_area: str, kind: str, limit: int = 10) -> lis
     return rows[:limit]
 
 
+# Studies for name
 def studies_linked_to(kind: str, name: str, limit: int = 10) -> list[dict]:
     """Studies linked to an intervention, condition or sponsor whose name contains `name`."""
     label, text = _label(kind), (name or "").strip()
@@ -271,6 +290,7 @@ def studies_linked_to(kind: str, name: str, limit: int = 10) -> list[dict]:
     return rows[:limit]
 
 
+# Shortest study path
 def connection(nct_id: str, other_nct_id: str) -> list[dict]:
     """Shortest chain of shared links between two studies (up to MAX_HOPS edges), as one row."""
     a, b = _nct(nct_id), _nct(other_nct_id)
@@ -307,6 +327,7 @@ TEMPLATES = {f.__name__: f for f in (related_studies, shared_across_areas, share
                                      studies_linked_to, connection)}
 
 
+# Run query template
 def run(question_type: str, **args) -> dict:
     """Run one template. Arguments a template does not take are ignored."""
     fn = TEMPLATES.get((question_type or "").strip())

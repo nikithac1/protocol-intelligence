@@ -13,10 +13,12 @@ OVERLAP_TOKENS = 120
 MIN_TOKENS = 100  # sections smaller than this are merged forward
 
 
+# Estimate tokens
 def est_tokens(text: str) -> int:
     return max(1, len(text) // 4)
 
 
+# Split long paragraph
 def _split_long(p: Paragraph) -> list[Paragraph]:
     """Split an oversized paragraph on sentence boundaries."""
     if est_tokens(p.text) <= MAX_TOKENS:
@@ -44,6 +46,7 @@ def _split_long(p: Paragraph) -> list[Paragraph]:
     return final
 
 
+# Chunk before metadata
 @dataclass
 class RawChunk:
     path: list[str]
@@ -52,6 +55,7 @@ class RawChunk:
     page_end: int
 
 
+# Chunk by section
 def chunk_sections(sections: list[Section]) -> list[RawChunk]:
     chunks: list[RawChunk] = []
     carry_path: list[str] | None = None
@@ -92,12 +96,14 @@ def chunk_sections(sections: list[Section]) -> list[RawChunk]:
     return chunks
 
 
+# Create one chunk
 def _emit(path: list[str], paras: list[Paragraph]) -> RawChunk:
     return RawChunk(path=list(path), text="\n".join(p.text for p in paras),
                     page_start=min(p.page_start for p in paras),
                     page_end=max(p.page_end for p in paras))
 
 
+# Chunk by page
 def page_chunks(lines_by_page: dict[int, str]) -> list[RawChunk]:
     """Fallback when headings are not detectable: one chunk per ~TARGET_TOKENS of pages."""
     paras = [Paragraph(t, p, p) for p, t in sorted(lines_by_page.items()) if t.strip()]
@@ -105,6 +111,7 @@ def page_chunks(lines_by_page: dict[int, str]) -> list[RawChunk]:
     return chunk_sections([sec])
 
 
+# Add citation details
 def build_chunk_record(*, nct_id: str, doc_key: str, document_title: str, document_version: str,
                        source_url: str, source_sha256: str, raw: RawChunk, seq: int,
                        extraction_method: str, extraction_confidence: str,

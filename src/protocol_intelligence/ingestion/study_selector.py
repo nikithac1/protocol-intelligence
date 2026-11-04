@@ -25,6 +25,7 @@ STATUSES = ["COMPLETED", "TERMINATED", "ACTIVE_NOT_RECRUITING", "RECRUITING"]
 MAX_DOC_BYTES = 25 * 1024 * 1024
 
 
+# Candidate study
 @dataclass
 class Candidate:
     nct_id: str
@@ -35,16 +36,19 @@ class Candidate:
     reason: str = ""
 
 
+# Get phase label
 def _phase_key(raw: dict) -> str:
     phases = raw["protocolSection"].get("designModule", {}).get("phases") or ["NA"]
     return "/".join(phases)
 
 
+# Has usable PDF
 def _usable(raw: dict) -> bool:
     docs = protocol_docs(raw)
     return bool(docs) and any((d.get("size") or 0) <= MAX_DOC_BYTES for d in docs)
 
 
+# Find candidate studies
 def discover(client: ClinicalTrialsClient, per_area_pool: int = 150) -> list[Candidate]:
     """Pull a candidate pool per area (most recently updated first)."""
     pool: list[Candidate] = []
@@ -67,6 +71,7 @@ def discover(client: ClinicalTrialsClient, per_area_pool: int = 150) -> list[Can
     return pool
 
 
+# Pick balanced studies
 def select(pool: list[Candidate], total: int = 100) -> list[Candidate]:
     """Round-robin over (phase, status) buckets within each area for diversity."""
     areas = list(THERAPEUTIC_AREAS)

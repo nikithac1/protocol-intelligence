@@ -13,15 +13,19 @@ CDN_DOCS_BASE = "https://cdn.clinicaltrials.gov/large-docs"
 STUDY_PAGE_BASE = "https://clinicaltrials.gov/study"
 
 
+# Build PDF URL
 def protocol_doc_url(nct_id: str, filename: str) -> str:
     return f"{CDN_DOCS_BASE}/{nct_id[-2:]}/{nct_id}/{filename}"
 
 
+# Build study URL
 def study_page_url(nct_id: str) -> str:
     return f"{STUDY_PAGE_BASE}/{nct_id}"
 
 
+# Trials API client
 class ClinicalTrialsClient:
+    # Set up client
     def __init__(self, base_url: str | None = None, min_interval_s: float = 1.3):
         # API guidance is ~50 requests/min; stay under it.
         self.base_url = (base_url or get_settings().ctgov_api_base).rstrip("/")
@@ -32,6 +36,7 @@ class ClinicalTrialsClient:
             headers={"User-Agent": "protocol-intelligence-poc/0.1 (research)"},
         )
 
+    # GET with retries
     def _get(self, url: str, params: dict | None = None, retries: int = 4) -> httpx.Response:
         for attempt in range(retries + 1):
             wait = self.min_interval_s - (time.monotonic() - self._last_call)
@@ -51,6 +56,7 @@ class ClinicalTrialsClient:
                 time.sleep(2 ** (attempt + 1))
         raise RuntimeError("unreachable")
 
+    # Search all pages
     def search(self, params: dict, max_records: int) -> Iterator[dict]:
         """Yield study records across pages until max_records."""
         params = {"pageSize": min(max_records, 200), **params}
@@ -67,12 +73,15 @@ class ClinicalTrialsClient:
                 return
             params = {**params, "pageToken": token}
 
+    # Fetch one study
     def get_study(self, nct_id: str) -> dict:
         return self._get(f"{self.base_url}/studies/{nct_id}").json()
 
+    # Download file
     def download(self, url: str) -> bytes:
         return self._get(url).content
 
+    # Get API version
     def api_version(self) -> str:
         try:
             return self._get(f"{self.base_url}/version").json().get("apiVersion", "unknown")

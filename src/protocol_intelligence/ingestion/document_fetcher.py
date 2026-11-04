@@ -11,10 +11,12 @@ from protocol_intelligence.ingestion.clinicaltrials_client import ClinicalTrials
 from protocol_intelligence.ingestion.study_selector import MAX_DOC_BYTES
 
 
+# Hash bytes
 def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+# Download, verify PDF
 def fetch_document(client: ClinicalTrialsClient, nct_id: str, doc: dict, out_dir: Path) -> dict:
     """Return a provenance entry describing the outcome; never raises for one bad file."""
     target = out_dir / nct_id / doc["filename"]

@@ -27,11 +27,13 @@ SCHEMA = pa.schema([
 ])
 
 
+# Text to embed
 def embedding_text(c: dict) -> str:
     """Prefix the heading path so a chunk's vector reflects where it sits in the protocol."""
     return f"{c['nct_id']} | {' > '.join(c['section_path'])}\n{c['text']}"
 
 
+# Create table rows
 def _rows(chunks: list[dict], areas: dict[str, str], progress=None) -> list[dict]:
     vectors = embed_many([embedding_text(c) for c in chunks], progress=progress)
     return [{
@@ -45,11 +47,13 @@ def _rows(chunks: list[dict], areas: dict[str, str], progress=None) -> list[dict
     } for c, v in zip(chunks, vectors)]
 
 
+# Read chunk files
 def read_chunks(*paths: Path) -> list[dict]:
     return [json.loads(l) for p in paths if p.exists()
             for l in p.read_text(encoding="utf-8").splitlines()]
 
 
+# Build LanceDB table
 def build(chunks_paths: list[Path], areas: dict[str, str], uri: Path = LOCAL_URI,
           progress=None) -> int:
     rows = _rows(read_chunks(*chunks_paths), areas, progress)
@@ -62,6 +66,7 @@ def build(chunks_paths: list[Path], areas: dict[str, str], uri: Path = LOCAL_URI
     return len(rows)
 
 
+# Open local table
 def _local_table():
     if not LOCAL_URI.exists():
         raise RuntimeError(f"No local index at {LOCAL_URI}; run scripts/build_index.py "
@@ -69,6 +74,7 @@ def _local_table():
     return open_table()  # the agent's cached handle, so searches see the change immediately
 
 
+# Add new chunks
 def add_chunks(chunks: list[dict], areas: dict[str, str]) -> int:
     """Embed and append chunks, replacing any rows with the same chunk_id."""
     table = _local_table()
@@ -81,12 +87,14 @@ def add_chunks(chunks: list[dict], areas: dict[str, str]) -> int:
     return len(rows)
 
 
+# Find one row
 def find(column: str, value: str) -> dict | None:
     rows = (open_table().search().where(f"{column} = {_quote(value)}")
             .select(["nct_id", "document_title"]).limit(1).to_list())
     return rows[0] if rows else None
 
 
+# Delete matching rows
 def delete_where(**equals: str) -> int:
     """Delete rows matching every column = value pair; returns the number removed."""
     table = _local_table()
@@ -96,10 +104,12 @@ def delete_where(**equals: str) -> int:
     return before - table.count_rows()
 
 
+# Quote SQL text
 def _quote(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
 
 
+# Open LanceDB table
 @lru_cache
 def open_table():
     """Prefer local copy; fall back to s3://<bucket>/index/lancedb (e.g. inside AgentCore)."""

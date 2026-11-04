@@ -46,29 +46,35 @@ DIRTY_FLAG = PROCESSED / "uploads_unpublished"  # exists while local index/ diff
 _write_lock = threading.Lock()  # one writer at a time for the index and the JSON files
 
 
+# Bad upload error
 class OnboardError(ValueError):
     """Bad input; the message is safe to show the admin."""
 
 
+# Current time
 def _now() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
+# Read upload list
 def _read_docs() -> list[dict]:
     return json.loads(DOCS_PATH.read_text(encoding="utf-8")) if DOCS_PATH.exists() else []
 
 
+# Save upload list
 def _write_docs(docs: list[dict]) -> None:
     DOCS_PATH.parent.mkdir(parents=True, exist_ok=True)
     DOCS_PATH.write_text(json.dumps(docs, indent=1), encoding="utf-8")
 
 
+# Filter JSONL rows
 def _rewrite_jsonl(path: Path, keep) -> None:
     rows = [json.loads(l) for l in path.read_text(encoding="utf-8").splitlines()] if path.exists() else []
     path.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows if keep(r)),
                     encoding="utf-8")
 
 
+# Append JSONL rows
 def _append_jsonl(path: Path, rows: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
@@ -76,10 +82,12 @@ def _append_jsonl(path: Path, rows: list[dict]) -> None:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
 
+# Load all studies
 def _studies() -> dict[str, dict]:
     return {r["nct_id"]: r for r in study_repository.read_records(CORPUS_STUDIES, STUDIES_PATH)}
 
 
+# Find uploaded PDF
 def pdf_path(sha256: str) -> Path | None:
     """Local file for an uploaded document (served as its citation link)."""
     if SHA_RE.match(sha256):
@@ -89,6 +97,7 @@ def pdf_path(sha256: str) -> Path | None:
     return None
 
 
+# Check upload
 def validate(data: bytes, nct_id: str, therapeutic_area: str | None) -> str:
     """Checks a request before it is queued; returns the normalised NCT ID."""
     nct_id = nct_id.strip().upper()
@@ -104,6 +113,7 @@ def validate(data: bytes, nct_id: str, therapeutic_area: str | None) -> str:
     return nct_id
 
 
+# Reject duplicate file
 def _check_duplicate(sha: str) -> None:
     # One copy per file: a SHA-256 then identifies exactly one document in the index.
     if any(d["sha256"] == sha for d in _read_docs()):
@@ -113,6 +123,7 @@ def _check_duplicate(sha: str) -> None:
                            f"({hit['nct_id']}, {hit['document_title']}).")
 
 
+# Index uploaded PDF
 def onboard_pdf(data: bytes, *, filename: str, nct_id: str, document_title: str,
                 document_version: str = "", source_url: str = "",
                 therapeutic_area: str | None = None, step=lambda msg: None) -> dict:
@@ -130,38 +141,45 @@ def onboard_pdf(data: bytes, *, filename: str, nct_id: str, document_title: str,
         studies = _studies()
         new_chunks: list[dict] = []
         new_study = nct_id not in studies
-        if new_study:
-            step(f"{nct_id} is not in the corpus: fetching its ClinicalTrials.gov record")
-            ct = ClinicalTrialsClient()
-            try:
-                record = canonical_record(ct.get_study(nct_id), ct.api_version(), _now())
-            except Exception as e:  # unknown ID, network error: still index the PDF
-                step(f"Registry record unavailable ({type(e).__name__}); indexing the PDF only")
-                record = None
-            if record:
-                record["therapeutic_area"] = therapeutic_area or "other"
-                _append_jsonl(STUDIES_PATH, [record])
-                study_repository.build(CORPUS_STUDIES, STUDIES_PATH)
-                studies[nct_id] = record
-                new_chunks += registry_chunks(record)
+        record = None
+        try:
+            if new_study:
+                step(f"{nct_id} is not in the corpus: fetching its ClinicalTrials.gov record")
+                ct = ClinicalTrialsClient()
+                try:
+                    record = canonical_record(ct.get_study(nct_id), ct.api_version(), _now())
+                except Exception as e:  # unknown ID, network error: still index the PDF
+                    step(f"Registry record unavailable ({type(e).__name__}); indexing the PDF only")
+                if record:
+                    record["therapeutic_area"] = therapeutic_area or "other"
+                    studies[nct_id] = record
+                    new_chunks += registry_chunks(record)
 
-        step("Extracting text and splitting it into protocol sections")
-        doc_key = f"upload_{sha[:12]}"
-        title = document_title.strip() or Path(filename).stem
-        chunks, status, _ = process_pdf(
-            DATA_DIR / rel, nct_id=nct_id, doc_key=doc_key, document_title=title,
-            document_version=document_version.strip() or _now()[:10],
-            source_url=source_url.strip() or f"/documents/{sha}.pdf", sha256=sha)
-        if status["status"] == "needs_ocr":
+            step("Extracting text and splitting it into protocol sections")
+            doc_key = f"upload_{sha[:12]}"
+            title = document_title.strip() or Path(filename).stem
+            chunks, status, _ = process_pdf(
+                DATA_DIR / rel, nct_id=nct_id, doc_key=doc_key, document_title=title,
+                document_version=document_version.strip() or _now()[:10],
+                source_url=source_url.strip() or f"/documents/{sha}.pdf", sha256=sha)
+            if status["status"] == "needs_ocr":
+                raise OnboardError("No text layer found (scanned PDF). Run OCR on it and upload again.")
+            new_chunks += chunks
+
+            step(f"Embedding {len(new_chunks)} chunks with Titan and adding them to the index")
+            areas = {n: r.get("therapeutic_area") or "" for n, r in studies.items()}
+            if nct_id not in studies:  # registry record unavailable
+                areas[nct_id] = therapeutic_area or "other"
+            index.add_chunks(new_chunks, areas)
+        except Exception:
             (DATA_DIR / rel).unlink(missing_ok=True)
-            raise OnboardError("No text layer found (scanned PDF). Run OCR on it and upload again.")
-        new_chunks += chunks
+            raise
 
-        step(f"Embedding {len(new_chunks)} chunks with Titan and adding them to the index")
-        areas = {n: r.get("therapeutic_area") or "" for n, r in studies.items()}
-        if nct_id not in studies:  # registry record unavailable
-            areas[nct_id] = therapeutic_area or "other"
-        index.add_chunks(new_chunks, areas)
+        # Only now is the upload known to be good: a failed one must leave no study behind, or a
+        # retry would treat the study as existing and never index its registry chunks.
+        if record:
+            _append_jsonl(STUDIES_PATH, [record])
+            study_repository.build(CORPUS_STUDIES, STUDIES_PATH)
         _append_jsonl(CHUNKS_PATH, new_chunks)
         DIRTY_FLAG.touch()
 
@@ -176,6 +194,7 @@ def onboard_pdf(data: bytes, *, filename: str, nct_id: str, document_title: str,
         return doc
 
 
+# Remove uploaded PDF
 def delete_document(sha256: str) -> dict:
     """Remove an uploaded document's chunks (and its study, if the upload added it)."""
     if not SHA_RE.match(sha256):
@@ -200,6 +219,7 @@ def delete_document(sha256: str) -> dict:
         return {"deleted": sha256, "chunks_removed": removed}
 
 
+# List all documents
 def list_documents() -> dict:
     """Every protocol document in the index, with uploads marked."""
     uploads = {d["sha256"]: d for d in _read_docs()}
@@ -227,6 +247,7 @@ def list_documents() -> dict:
             "chunks": table.count_rows(), "unpublished_changes": DIRTY_FLAG.exists()}
 
 
+# Publish index
 def publish() -> dict:
     """Upload index/ to S3; new AgentCore sessions then load the updated knowledge store."""
     with _write_lock:
